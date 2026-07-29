@@ -1,0 +1,551 @@
+<Window x:Class="SteamFinish.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:m="clr-namespace:SteamFinish.Markup"
+        Title="SteamFinish"
+        FlowDirection="{Binding FlowDirection}"
+        Width="500" Height="760"
+        MinWidth="450" MinHeight="560"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        FontFamily="{StaticResource UiFont}"
+        TextOptions.TextFormattingMode="Ideal"
+        Icon="Assets/app.ico">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ==================== Header ==================== -->
+        <Border Background="{DynamicResource HeaderBrush}" Padding="16,14">
+            <StackPanel Orientation="Horizontal">
+                <Image Source="Assets/app.ico" Width="36" Height="36"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="SteamFinish" Foreground="White" FontSize="17" FontWeight="SemiBold" />
+                    <TextBlock Text="{m:Tr App.Tagline}"
+                               Foreground="{DynamicResource HeaderSubtitleBrush}" FontSize="11" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <TabControl Grid.Row="1" Style="{StaticResource FlatTabControl}">
+
+            <!-- ==================== Monitor ==================== -->
+            <TabItem Header="{m:Tr Tab.Monitor}" Style="{StaticResource FlatTabItem}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16,16,16,0">
+
+                        <!-- Live transfer, laid out the way the Steam client shows it -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="{m:Tr Status.Title}" Style="{StaticResource SectionTitle}" />
+                                    <Button Content="{m:Tr Button.Refresh}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Command="{Binding RefreshCommand}"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                                            Padding="10,4" FontSize="11" Margin="0,-4,0,0" />
+                                </Grid>
+
+                                <TextBlock Text="{Binding StatusHeadline}" Style="{StaticResource HeadlineText}" />
+                                <TextBlock Text="{Binding StatusDetail}" Style="{StaticResource MutedText}"
+                                           Margin="0,5,0,0" />
+
+                                <!-- The two bars are independent: bytes off the network, bytes onto disk -->
+                                <StackPanel Margin="0,14,0,0"
+                                            Visibility="{Binding HasActiveDownload, Converter={StaticResource BoolToVisibility}}">
+
+                                    <Grid Margin="0,0,0,4">
+                                        <TextBlock Text="{m:Tr Bar.Downloading}" Style="{StaticResource BarLabel}" />
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                            <TextBlock Text="{Binding DownloadBytesText}" FlowDirection="LeftToRight" Style="{StaticResource BarLabel}" />
+                                            <TextBlock Text="{Binding DownloadPercentText}" FlowDirection="LeftToRight" Style="{StaticResource BarValue}"
+                                                       Margin="10,0,0,0" MinWidth="34" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <ProgressBar Maximum="100" Value="{Binding DownloadPercent, Mode=OneWay}">
+                                        <ProgressBar.Style>
+                                            <Style TargetType="ProgressBar" BasedOn="{StaticResource DownloadProgress}">
+                                                <Style.Triggers>
+                                                    <!-- A stopped download goes amber, as it does in Steam -->
+                                                    <DataTrigger Binding="{Binding IsDownloadPaused}" Value="True">
+                                                        <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ProgressBar.Style>
+                                    </ProgressBar>
+
+                                    <Grid Margin="0,12,0,4">
+                                        <TextBlock Text="{m:Tr Bar.Installing}" Style="{StaticResource BarLabel}" />
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                            <TextBlock Text="{Binding InstallBytesText}" FlowDirection="LeftToRight" Style="{StaticResource BarLabel}" />
+                                            <TextBlock Text="{Binding InstallPercentText}" FlowDirection="LeftToRight" Style="{StaticResource BarValue}"
+                                                       Margin="10,0,0,0" MinWidth="34" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <ProgressBar Style="{StaticResource DownloadProgress}"
+                                                 Maximum="100" Value="{Binding InstallPercent, Mode=OneWay}"
+                                                 Foreground="{DynamicResource SuccessBrush}" />
+
+                                    <UniformGrid Columns="3" Rows="2" Margin="0,16,0,0">
+                                        <StackPanel Margin="0,0,0,12">
+                                            <TextBlock Text="{m:Tr Metric.Network}" Style="{StaticResource MetricLabel}" />
+                                            <TextBlock Text="{Binding NetworkText}" FlowDirection="LeftToRight" Style="{StaticResource MetricValue}" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,0,12">
+                                            <TextBlock Text="{m:Tr Metric.Peak}" Style="{StaticResource MetricLabel}" />
+                                            <TextBlock Text="{Binding PeakText}" FlowDirection="LeftToRight" Style="{StaticResource MetricValue}" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,0,12">
+                                            <TextBlock Text="{m:Tr Metric.Disk}" Style="{StaticResource MetricLabel}" />
+                                            <TextBlock Text="{Binding DiskText}" FlowDirection="LeftToRight" Style="{StaticResource MetricValue}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="{m:Tr Metric.TimeLeft}" Style="{StaticResource MetricLabel}" />
+                                            <TextBlock Text="{Binding EtaText}" FlowDirection="LeftToRight" Style="{StaticResource MetricValue}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="{m:Tr Metric.FinishesAt}" Style="{StaticResource MetricLabel}" />
+                                            <TextBlock Text="{Binding FinishesAtText}" FlowDirection="LeftToRight" Style="{StaticResource MetricValue}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="{m:Tr Metric.LeftToDownload}" Style="{StaticResource MetricLabel}" />
+                                            <TextBlock Text="{Binding TotalLeftText}" FlowDirection="LeftToRight" Style="{StaticResource MetricValue}" />
+                                        </StackPanel>
+                                    </UniformGrid>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                    <Ellipse Width="9" Height="9" VerticalAlignment="Center"
+                                             Fill="{Binding PhaseBrush}" />
+                                    <TextBlock Text="{Binding PhaseText}" Style="{StaticResource MutedText}"
+                                               Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Everything Steam still has to do, live download first -->
+                        <Border Style="{StaticResource Card}"
+                                Visibility="{Binding HasQueue, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="{m:Tr Queue.Title}" Style="{StaticResource SectionTitle}" />
+                                    <TextBlock Text="{Binding QueueSummary}" Style="{StaticResource MutedText}"
+                                               HorizontalAlignment="Right" VerticalAlignment="Top" />
+                                </Grid>
+
+                                <ItemsControl ItemsSource="{Binding Queue}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,0,0,12">
+                                                <Grid Margin="0,0,0,4">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                                                 Fill="{Binding Accent}" Margin="0,0,8,0" />
+                                                        <TextBlock Text="{Binding Name}" FlowDirection="LeftToRight" Style="{StaticResource BodyText}"
+                                                                   TextTrimming="CharacterEllipsis" MaxWidth="240" />
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                        <TextBlock Text="{Binding StateText}" Style="{StaticResource MutedText}" />
+                                                        <TextBlock Text="{Binding Percent, StringFormat={}{0:0}%}"
+                                                                   Style="{StaticResource BarValue}"
+                                                                   Margin="10,0,0,0" MinWidth="34" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <ProgressBar Style="{StaticResource QueueProgress}"
+                                                             Maximum="100" Value="{Binding Percent, Mode=OneWay}"
+                                                             Foreground="{Binding Accent}" />
+                                                <TextBlock Text="{Binding SizeText}" FlowDirection="LeftToRight" Style="{StaticResource MutedText}"
+                                                           Margin="0,4,0,0" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{m:Tr Action.Title}" Style="{StaticResource SectionTitle}" />
+                                <UniformGrid Columns="2" Margin="0,0,-8,-8">
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="Action" Content="{m:Tr Action.Shutdown}"
+                                                 IsChecked="{Binding SelectedAction, Converter={StaticResource EnumToBool}, ConverterParameter=Shutdown}" />
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="Action" Content="{m:Tr Action.Sleep}"
+                                                 IsChecked="{Binding SelectedAction, Converter={StaticResource EnumToBool}, ConverterParameter=Sleep}" />
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="Action" Content="{m:Tr Action.Hibernate}"
+                                                 IsChecked="{Binding SelectedAction, Converter={StaticResource EnumToBool}, ConverterParameter=Hibernate}" />
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="Action" Content="{m:Tr Action.Restart}"
+                                                 IsChecked="{Binding SelectedAction, Converter={StaticResource EnumToBool}, ConverterParameter=Restart}" />
+                                </UniformGrid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding CountdownCaption}" Style="{StaticResource SectionTitle}" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding CountdownDisplay}" FlowDirection="LeftToRight" FontSize="42" FontWeight="Light"
+                                               Foreground="{Binding PhaseBrush}" VerticalAlignment="Bottom"
+                                               LineHeight="46" LineStackingStrategy="BlockLineHeight" />
+                                    <TextBlock Text="{m:Tr Countdown.Seconds}" Style="{StaticResource MutedText}"
+                                               VerticalAlignment="Bottom" Margin="8,0,0,8" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Button Style="{StaticResource PrimaryButton}"
+                                Content="{Binding ToggleButtonText}"
+                                Command="{Binding ToggleMonitoringCommand}"
+                                Margin="0,2,0,10" />
+
+                        <Button Style="{StaticResource DangerButton}"
+                                Content="{Binding CancelButtonText}"
+                                Command="{Binding CancelCommand}"
+                                Margin="0,0,0,16" />
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ==================== Settings ==================== -->
+            <TabItem Header="{m:Tr Tab.Settings}" Style="{StaticResource FlatTabItem}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16,16,16,0">
+
+                        <!-- ==================== Appearance ==================== -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{m:Tr Settings.Appearance}" Style="{StaticResource SectionTitle}" />
+                                <UniformGrid Columns="3" Margin="0,0,-8,-8">
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="AppTheme"
+                                                 Content="{m:Tr Theme.System}"
+                                                 IsChecked="{Binding Theme, Converter={StaticResource EnumToBool}, ConverterParameter=System}" />
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="AppTheme"
+                                                 Content="{m:Tr Theme.Light}"
+                                                 IsChecked="{Binding Theme, Converter={StaticResource EnumToBool}, ConverterParameter=Light}" />
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="AppTheme"
+                                                 Content="{m:Tr Theme.Dark}"
+                                                 IsChecked="{Binding Theme, Converter={StaticResource EnumToBool}, ConverterParameter=Dark}" />
+                                </UniformGrid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ==================== Language ==================== -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{m:Tr Settings.Language}" Style="{StaticResource SectionTitle}" />
+                                <UniformGrid Columns="2" Margin="0,0,-8,-8">
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="UiLanguage"
+                                                 Content="{m:Tr Language.English}"
+                                                 IsChecked="{Binding UiLanguage, Converter={StaticResource EnumToBool}, ConverterParameter=English}" />
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="UiLanguage"
+                                                 Content="{m:Tr Language.Arabic}"
+                                                 IsChecked="{Binding UiLanguage, Converter={StaticResource EnumToBool}, ConverterParameter=Arabic}" />
+                                </UniformGrid>
+                                <TextBlock Text="{m:Tr Settings.LanguageHint}" Style="{StaticResource MutedText}"
+                                           Margin="0,8,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{m:Tr Settings.Timing}" Style="{StaticResource SectionTitle}" />
+
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock Text="{m:Tr Settings.CountdownSeconds}" Style="{StaticResource BodyText}" />
+                                        <TextBlock Text="{m:Tr Settings.CountdownHint}"
+                                                   Style="{StaticResource MutedText}" />
+                                    </StackPanel>
+                                    <TextBox Grid.Column="1" Style="{StaticResource NumberBox}"
+                                             VerticalAlignment="Center"
+                                             PreviewTextInput="OnNumericInput"
+                                             Text="{Binding CountdownSeconds, UpdateSourceTrigger=LostFocus}" />
+                                </Grid>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock Text="{m:Tr Settings.QuietSeconds}" Style="{StaticResource BodyText}" />
+                                        <TextBlock Text="{m:Tr Settings.QuietHint}"
+                                                   Style="{StaticResource MutedText}" />
+                                    </StackPanel>
+                                    <TextBox Grid.Column="1" Style="{StaticResource NumberBox}"
+                                             VerticalAlignment="Center"
+                                             PreviewTextInput="OnNumericInput"
+                                             Text="{Binding ConfirmationSeconds, UpdateSourceTrigger=LostFocus}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ==================== Telegram ==================== -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{m:Tr Telegram.Title}" Style="{StaticResource SectionTitle}" />
+
+                                <CheckBox Style="{StaticResource SettingCheckBox}"
+                                          Content="{m:Tr Telegram.Enable}"
+                                          IsChecked="{Binding TelegramEnabled}" />
+
+                                <Grid Margin="0,4,0,4">
+                                    <TextBlock Text="{m:Tr Telegram.BotToken}" Style="{StaticResource MutedText}" />
+                                    <Button Content="{m:Tr Telegram.CreateBot}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Command="{Binding OpenBotFatherCommand}"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                                            Padding="10,4" FontSize="11" Margin="0,-6,0,0" />
+                                </Grid>
+                                <Grid>
+                                    <TextBox Style="{StaticResource NumberBox}" Width="Auto"
+                                             HorizontalContentAlignment="Left"
+                                             FontFamily="Consolas"
+                                             Text="{Binding TelegramBotToken, UpdateSourceTrigger=LostFocus}" FlowDirection="LeftToRight"
+                                             Visibility="{Binding ShowBotToken, Converter={StaticResource BoolToVisibility}}" />
+                                    <TextBox Style="{StaticResource NumberBox}" Width="Auto"
+                                             HorizontalContentAlignment="Left"
+                                             FontFamily="Consolas"
+                                             IsReadOnly="True" Focusable="False"
+                                             Text="{Binding MaskedBotToken, Mode=OneWay}" FlowDirection="LeftToRight"
+                                             Visibility="{Binding ShowBotToken, Converter={StaticResource InverseBoolToVisibility}}" />
+                                </Grid>
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Margin="0,8,0,0"
+                                          Content="{m:Tr Telegram.ShowToken}" IsChecked="{Binding ShowBotToken}" />
+                                <TextBlock Style="{StaticResource MutedText}" Margin="0,0,0,0"
+                                           Text="{m:Tr Telegram.TokenHint}" />
+
+                                <TextBlock Text="{m:Tr Telegram.ChatIds}" Style="{StaticResource MutedText}" Margin="0,12,0,4" />
+                                <ListBox Style="{StaticResource LibraryList}" ItemsSource="{Binding TelegramChatIds}"
+                                         SelectedItem="{Binding SelectedChatId}"
+                                         HorizontalContentAlignment="Stretch">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,3">
+                                                <TextBlock Text="{Binding Title}" FlowDirection="LeftToRight" FontSize="12" FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Subtitle}" FlowDirection="LeftToRight" FontSize="11"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Style="{StaticResource NumberBox}" Width="Auto"
+                                             HorizontalContentAlignment="Left"
+                                             Text="{Binding ChatIdInput, UpdateSourceTrigger=PropertyChanged}" FlowDirection="LeftToRight" />
+                                    <Button Grid.Column="1" Content="{m:Tr Telegram.Add}" Style="{StaticResource SecondaryButton}"
+                                            Command="{Binding AddChatIdCommand}" Margin="8,0,0,0" />
+                                    <Button Grid.Column="2" Content="{m:Tr Common.Remove}" Style="{StaticResource SecondaryButton}"
+                                            Command="{Binding RemoveChatIdCommand}" Margin="8,0,0,0" />
+                                </Grid>
+                                <!-- Automatic lookup: listen for a message, then confirm with a code -->
+                                <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="8"
+                                        Padding="12" Margin="0,12,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="{m:Tr Telegram.FindTitle}" Style="{StaticResource BodyText}"
+                                                   FontWeight="SemiBold" />
+                                        <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,8"
+                                                   Text="{m:Tr Telegram.FindHint}" />
+
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="{Binding FindChatButtonText}"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Command="{Binding FindChatCommand}" />
+                                            <Button Content="{m:Tr Telegram.Stop}" Style="{StaticResource SecondaryButton}"
+                                                    Command="{Binding CancelPairingCommand}" Margin="8,0,0,0" />
+                                        </StackPanel>
+
+                                        <!-- Shown once a chat answers, so the code can be compared -->
+                                        <Border Background="{DynamicResource CardBrush}" CornerRadius="6"
+                                                Padding="12" Margin="0,10,0,0"
+                                                Visibility="{Binding IsAwaitingChatConfirmation, Converter={StaticResource BoolToVisibility}}">
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource MutedText}"
+                                                           Text="{m:Tr Telegram.CodeHint}" />
+                                                <TextBlock Text="{Binding PairingCode}" FlowDirection="LeftToRight" FontSize="30"
+                                                           FontWeight="SemiBold" Margin="0,6,0,6"
+                                                           Foreground="{DynamicResource AccentBrush}" />
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="{m:Tr Telegram.CodesMatch}"
+                                                            Style="{StaticResource PrimaryButton}"
+                                                            Padding="12,7" FontSize="12"
+                                                            Command="{Binding ConfirmChatCommand}" />
+                                                    <Button Content="{m:Tr Telegram.Cancel}" Style="{StaticResource SecondaryButton}"
+                                                            Command="{Binding CancelPairingCommand}" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <TextBlock Text="{Binding PairingStatus}" Margin="0,8,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding PairingStatus}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+
+                                <TextBlock Style="{StaticResource MutedText}" Margin="0,8,0,0"
+                                           Text="{m:Tr Telegram.ManualHint}" />
+
+                                <TextBlock Text="{m:Tr Telegram.SendWhen}" Style="{StaticResource MutedText}" Margin="0,14,0,6" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Content="{m:Tr Telegram.OnStart}"
+                                          IsChecked="{Binding TelegramNotifyOnStart}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Content="{m:Tr Telegram.OnFinish}"
+                                          IsChecked="{Binding TelegramNotifyOnFinish}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Content="{m:Tr Telegram.OnCancel}"
+                                          IsChecked="{Binding TelegramNotifyOnCancel}" />
+
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Style="{StaticResource SettingCheckBox}" Margin="0"
+                                              VerticalAlignment="Center"
+                                              Content="{m:Tr Telegram.OnProgress}"
+                                              IsChecked="{Binding TelegramNotifyOnProgress}" />
+                                    <TextBox Grid.Column="1" Style="{StaticResource NumberBox}" Width="60"
+                                             VerticalAlignment="Center"
+                                             PreviewTextInput="OnNumericInput"
+                                             Text="{Binding TelegramProgressStep, UpdateSourceTrigger=LostFocus}" />
+                                </Grid>
+
+                                <TextBlock Text="{m:Tr Telegram.MessageLanguage}" Style="{StaticResource MutedText}" Margin="0,4,0,6" />
+                                <UniformGrid Columns="2" Margin="0,0,-8,0">
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="TelegramLanguage"
+                                                 Content="العربية"
+                                                 IsChecked="{Binding TelegramLanguage, Converter={StaticResource EnumToBool}, ConverterParameter=Arabic}" />
+                                    <RadioButton Style="{StaticResource ActionTile}" GroupName="TelegramLanguage"
+                                                 Content="English"
+                                                 IsChecked="{Binding TelegramLanguage, Converter={StaticResource EnumToBool}, ConverterParameter=English}" />
+                                </UniformGrid>
+
+                                <Button Content="{m:Tr Telegram.SendTest}" Style="{StaticResource SecondaryButton}"
+                                        Command="{Binding TestTelegramCommand}"
+                                        HorizontalAlignment="Left" Margin="0,6,0,0" />
+
+                                <TextBlock Text="{Binding TelegramStatus}" Margin="0,8,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding TelegramStatus}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{m:Tr Settings.Behaviour}" Style="{StaticResource SectionTitle}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Content="{m:Tr Settings.StartWithWindows}"
+                                          IsChecked="{Binding StartWithWindows}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Content="{m:Tr Settings.StartMinimized}"
+                                          IsChecked="{Binding StartMinimized}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Content="{m:Tr Settings.CloseToTray}"
+                                          IsChecked="{Binding CloseToTray}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Content="{m:Tr Settings.LiveStatus}"
+                                          IsChecked="{Binding LiveStatusWhileOpen}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Content="{m:Tr Settings.TrayNotifications}"
+                                          IsChecked="{Binding TrayNotifications}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Content="{m:Tr Settings.SoundNotification}"
+                                          IsChecked="{Binding SoundNotification}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Content="{m:Tr Settings.EnableLogging}"
+                                          IsChecked="{Binding EnableLogging}" Margin="0" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{m:Tr Settings.Safety}" Style="{StaticResource SectionTitle}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}"
+                                          Content="{m:Tr Settings.RequireDownload}"
+                                          IsChecked="{Binding RequireDownloadBeforeAction}" />
+                                <TextBlock Style="{StaticResource MutedText}" Margin="28,-6,0,10"
+                                           Text="{m:Tr Settings.RequireDownloadHint}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}"
+                                          Content="{m:Tr Settings.IgnorePaused}"
+                                          IsChecked="{Binding IgnorePausedDownloads}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}"
+                                          Content="{m:Tr Settings.ForceClose}"
+                                          IsChecked="{Binding ForceCloseApps}" Margin="0" />
+                                <TextBlock Style="{StaticResource MutedText}" Margin="28,4,0,0"
+                                           Text="{m:Tr Settings.ForceCloseHint}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{m:Tr Settings.Libraries}" Style="{StaticResource SectionTitle}" />
+                                <CheckBox Style="{StaticResource SettingCheckBox}"
+                                          Content="{m:Tr Settings.AutoDetect}"
+                                          IsChecked="{Binding AutoDetectLibraries}" />
+
+                                <TextBlock Text="{m:Tr Settings.LibrariesWatched}" Style="{StaticResource MutedText}"
+                                           Margin="0,4,0,4" />
+                                <ListBox Style="{StaticResource LibraryList}" ItemsSource="{Binding DetectedLibraries}" FlowDirection="LeftToRight"
+                                         Focusable="False" IsHitTestVisible="False" />
+
+                                <TextBlock Text="{m:Tr Settings.ExtraLibraries}" Style="{StaticResource MutedText}"
+                                           Margin="0,12,0,4" />
+                                <ListBox Style="{StaticResource LibraryList}" ItemsSource="{Binding ManualLibraries}" FlowDirection="LeftToRight"
+                                         SelectedItem="{Binding SelectedManualLibrary}" />
+
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="{m:Tr Settings.AddLibrary}" Style="{StaticResource SecondaryButton}"
+                                            Command="{Binding AddLibraryCommand}" />
+                                    <Button Content="{m:Tr Common.Remove}" Style="{StaticResource SecondaryButton}"
+                                            Command="{Binding RemoveLibraryCommand}" Margin="8,0,0,0" />
+                                    <Button Content="{m:Tr Settings.OpenDataFolder}" Style="{StaticResource SecondaryButton}"
+                                            Command="{Binding OpenDataFolderCommand}" Margin="8,0,0,0" />
+                                </StackPanel>
+
+                                <TextBlock Margin="0,10,0,0"
+                                           Foreground="{DynamicResource WarningBrush}"
+                                           Text="{Binding LibraryMessage}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding LibraryMessage}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Style="{StaticResource MutedText}" Margin="2,0,0,16"
+                                   Text="{m:Tr Settings.SavedTo}" />
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

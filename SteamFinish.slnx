@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SteamFinish.Core/SteamFinish.Core.csproj" />
+    <Project Path="src/SteamFinish/SteamFinish.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SteamFinish.Tests/SteamFinish.Tests.csproj" />
+  </Folder>
+</Solution>

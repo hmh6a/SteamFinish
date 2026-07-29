@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Light palette. Every key here also exists in Palette.Dark.xaml; the two are swapped
+         wholesale at runtime, which is why the control styles bind with DynamicResource. -->
+
+    <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#FFF4F6FA" />
+    <SolidColorBrush x:Key="CardBrush" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="CardHoverBrush" Color="#FFFAFBFD" />
+    <SolidColorBrush x:Key="CardBorderBrush" Color="#FFE4E9F1" />
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="#FFCBD5E1" />
+
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FF0F172A" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FF64748B" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="#FF94A3B8" />
+
+    <SolidColorBrush x:Key="AccentBrush" Color="#FF1B74C4" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#FF155FA0" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#FFEAF3FC" />
+    <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFFFF" />
+
+    <SolidColorBrush x:Key="SuccessBrush" Color="#FF12855B" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FFB45309" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#FFC62828" />
+    <SolidColorBrush x:Key="DisabledBrush" Color="#FFAFBACA" />
+    <SolidColorBrush x:Key="TrackBrush" Color="#FFE8EDF3" />
+    <SolidColorBrush x:Key="ScrollThumbBrush" Color="#FFC3CDDB" />
+    <SolidColorBrush x:Key="ScrollThumbHoverBrush" Color="#FF9AA9BC" />
+
+    <SolidColorBrush x:Key="HeaderSubtitleBrush" Color="#FF9CC3DE" />
+    <LinearGradientBrush x:Key="HeaderBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FF1B2838" Offset="0" />
+        <GradientStop Color="#FF2A475E" Offset="1" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="AccentBarBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#FF2A8BD9" Offset="0" />
+        <GradientStop Color="#FF1B74C4" Offset="1" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="SuccessBarBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#FF17A06D" Offset="0" />
+        <GradientStop Color="#FF12855B" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- The whole effect is a resource so each theme can tune depth as well as colour. -->
+    <DropShadowEffect x:Key="CardShadow" Color="#FF64748B" BlurRadius="14"
+                      ShadowDepth="2" Direction="270" Opacity="0.16" RenderingBias="Quality" />
+    <DropShadowEffect x:Key="ButtonShadow" Color="#FF1B74C4" BlurRadius="10"
+                      ShadowDepth="2" Direction="270" Opacity="0.28" RenderingBias="Quality" />
+
+</ResourceDictionary>

@@ -31,7 +31,7 @@ public sealed class DownloadSession
     public IReadOnlyCollection<SessionGame> Games => _games.Values;
 
     /// <summary>Folds a snapshot in. Snapshots with no outstanding work are ignored.</summary>
-    public void Observe(SteamSnapshot snapshot)
+    public void Observe(DownloadSnapshot snapshot)
     {
         if (!snapshot.IsReliable)
         {

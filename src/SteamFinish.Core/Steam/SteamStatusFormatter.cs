@@ -8,7 +8,7 @@ public sealed record SteamStatusText(string Headline, string Detail, double? Pro
 
 public static class SteamStatusFormatter
 {
-    public static SteamStatusText Describe(SteamSnapshot snapshot)
+    public static SteamStatusText Describe(DownloadSnapshot snapshot)
     {
         if (!snapshot.IsReliable)
         {
@@ -70,7 +70,7 @@ public static class SteamStatusFormatter
     private static string NameWithPercent(AppActivity app) =>
         Loc.Ltr($"{app.Name} ({Humanize.Percent(app.Progress)})");
 
-    private static string DescribeQueue(SteamSnapshot snapshot, AppActivity headline)
+    private static string DescribeQueue(DownloadSnapshot snapshot, AppActivity headline)
     {
         var others = snapshot.Pipeline.Count(a => a.AppId != headline.AppId);
         var parts = new List<string>(2);

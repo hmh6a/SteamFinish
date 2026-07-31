@@ -98,7 +98,7 @@ public sealed class MonitorEngine(Func<MonitorOptions> optionsProvider)
     }
 
     /// <summary>Feeds a snapshot in and advances the state machine. Safe to call every second.</summary>
-    public MonitorPhase Update(SteamSnapshot snapshot, DateTimeOffset now)
+    public MonitorPhase Update(DownloadSnapshot snapshot, DateTimeOffset now)
     {
         if (Phase is MonitorPhase.Disabled or MonitorPhase.Executing)
         {

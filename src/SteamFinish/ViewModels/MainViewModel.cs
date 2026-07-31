@@ -63,6 +63,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _totalLeftText = "—";
     private string _queueSummary = string.Empty;
     private bool _isPaused;
+    private string _platformText = string.Empty;
+    private bool _hasPlatform;
 
     private string _chatIdInput = string.Empty;
     private ChatEntryViewModel? _selectedChatId;
@@ -317,6 +319,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _totalLeftText, value);
     }
 
+    /// <summary>Which launcher the headline download belongs to — "Steam" or "Xbox".</summary>
+    public string PlatformText
+    {
+        get => _platformText;
+        private set => SetProperty(ref _platformText, value);
+    }
+
+    /// <summary>False when nothing is outstanding, so the badge is not shown over an empty status.</summary>
+    public bool HasPlatform
+    {
+        get => _hasPlatform;
+        private set => SetProperty(ref _hasPlatform, value);
+    }
+
     /// <summary>True when the live download is not moving, whether paused by hand or stalled.</summary>
     public bool IsDownloadPaused
     {
@@ -525,6 +541,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetSetting(_settings.EnableLogging == value, () => _settings.EnableLogging = value) && _log is not null)
             {
                 _log.Enabled = value;
+            }
+        }
+    }
+
+    public bool WatchSteam
+    {
+        get => _settings.WatchSteam;
+        set
+        {
+            if (SetSetting(_settings.WatchSteam == value, () => _settings.WatchSteam = value))
+            {
+                _host.RefreshNow();
+            }
+        }
+    }
+
+    public bool WatchXbox
+    {
+        get => _settings.WatchXbox;
+        set
+        {
+            if (SetSetting(_settings.WatchXbox == value, () => _settings.WatchXbox = value))
+            {
+                _host.RefreshNow();
             }
         }
     }
@@ -781,7 +821,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _store.Save(_settings);
     }
 
-    private void OnSnapshotUpdated(SteamSnapshot snapshot)
+    private void OnSnapshotUpdated(DownloadSnapshot snapshot)
     {
         var status = SteamStatusFormatter.Describe(snapshot);
         StatusHeadline = status.Headline;
@@ -793,7 +833,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RefreshPhase();
     }
 
-    private void UpdateTransfer(SteamSnapshot snapshot)
+    private void UpdateTransfer(DownloadSnapshot snapshot)
     {
         var app = snapshot.Headline;
         var meter = _host.Meter;
@@ -805,6 +845,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             DownloadingName = "—";
             DownloadingState = string.Empty;
             IsDownloadPaused = false;
+            HasPlatform = false;
+            PlatformText = string.Empty;
             DownloadPercent = 0;
             InstallPercent = 0;
             DownloadBytesText = string.Empty;
@@ -821,6 +863,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var isLive = snapshot.IsLive(app);
         IsDownloadPaused = snapshot.IsPausedOrStalled(app);
+        PlatformText = Loc.Get($"Platform.{app.Platform}");
+        HasPlatform = true;
 
         DownloadingName = app.Name;
         DownloadingState = Loc.Get((app, isLive, IsDownloadPaused) switch
@@ -872,7 +916,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// Updates the queue in place. Rebuilding it every second would make the list flicker and drop
     /// the scroll position, so rows are only replaced when the order actually changes.
     /// </summary>
-    private void SyncQueue(SteamSnapshot snapshot)
+    private void SyncQueue(DownloadSnapshot snapshot)
     {
         // The live download has its own card at the top, so only what is waiting is listed here.
         var pipeline = snapshot.Waiting;

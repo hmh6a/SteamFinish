@@ -1,0 +1,18 @@
+{
+  "id": "gamearabizer.sample",
+  "name": "Sample Plugin",
+  "version": "1.0.0",
+  "author": "GameArabizer",
+  "description": "Demonstrates the plugin system: recognises a made-up engine from a marker file and adds an echo translation provider that needs no network or key.",
+  "entryAssembly": "GameArabizer.SamplePlugin.dll",
+  "entryType": "GameArabizer.SamplePlugin.SamplePlugin",
+  "minimumAppApiVersion": "1.0.0",
+  "maximumAppApiVersion": null,
+  "capabilities": [
+    "EngineDetection",
+    "TranslationProvider"
+  ],
+  "dependencies": [],
+  "projectUrl": "https://example.invalid/gamearabizer-sample-plugin",
+  "license": "Same terms as GameArabizer itself."
+}

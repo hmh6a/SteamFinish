@@ -166,7 +166,7 @@ public class TelegramNotifierTests
 {
     private static readonly DateTimeOffset Start = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private static SteamSnapshot Downloading(double fraction, string name = "Game", uint appId = 1) =>
+    private static DownloadSnapshot Downloading(double fraction, string name = "Game", uint appId = 1) =>
         Snapshot(App(
             AppStateFlags.UpdateStarted | AppStateFlags.Locked,
             downloaded: (long)(fraction * 1_000_000),
@@ -249,7 +249,7 @@ public class TelegramNotifierTests
         var (notifier, sent) = Build(Options());
         var meter = new TransferMeter();
 
-        SteamSnapshot Staging(double staged) =>
+        DownloadSnapshot Staging(double staged) =>
             Snapshot(App(
                 AppStateFlags.UpdateStarted,
                 downloaded: 24_168_810_176,

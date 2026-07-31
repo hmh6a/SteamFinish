@@ -27,7 +27,7 @@ public sealed class TelegramNotifier(Func<TelegramOptions> options, ITelegramSen
         _known = null;
     }
 
-    public void OnSnapshot(SteamSnapshot snapshot, TransferMeter meter)
+    public void OnSnapshot(DownloadSnapshot snapshot, TransferMeter meter)
     {
         if (!snapshot.IsReliable)
         {

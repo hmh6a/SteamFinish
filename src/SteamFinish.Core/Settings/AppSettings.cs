@@ -30,6 +30,12 @@ public sealed class AppSettings
 
     public bool SoundNotification { get; set; } = true;
 
+    /// <summary>Watch Steam downloads.</summary>
+    public bool WatchSteam { get; set; } = true;
+
+    /// <summary>Watch Xbox app / Microsoft Store game installs.</summary>
+    public bool WatchXbox { get; set; } = true;
+
     public bool AutoDetectLibraries { get; set; } = true;
 
     /// <summary>Extra library roots (folders that contain <c>steamapps</c>) added by hand.</summary>

@@ -7,7 +7,7 @@ using SteamFinish.Core.Vdf;
 namespace SteamFinish.Core.Steam;
 
 /// <summary>
-/// Reads Steam's on-disk state into a <see cref="SteamSnapshot"/>. Parsed manifests are cached
+/// Reads Steam's on-disk state into a <see cref="DownloadSnapshot"/>. Parsed manifests are cached
 /// by write time so repeated polling stays cheap.
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -26,12 +26,12 @@ public sealed class SteamScanner(ILibrarySource libraries, ILog? log = null)
 
     private bool _steamRunning;
 
-    public SteamSnapshot Scan(DateTimeOffset now)
+    public DownloadSnapshot Scan(DateTimeOffset now)
     {
         var roots = libraries.GetLibraryRoots();
         if (roots.Count == 0)
         {
-            return SteamSnapshot.Unavailable(now, "No Steam library folder was found.");
+            return DownloadSnapshot.Unavailable(now, "No Steam library folder was found.");
         }
 
         var apps = new List<AppActivity>();
@@ -71,7 +71,7 @@ public sealed class SteamScanner(ILibrarySource libraries, ILog? log = null)
 
         if (readable == 0)
         {
-            return SteamSnapshot.Unavailable(now, failure ?? "No Steam library folder could be read.");
+            return DownloadSnapshot.Unavailable(now, failure ?? "No Steam library folder could be read.");
         }
 
         var folderBusy = false;
@@ -80,7 +80,7 @@ public sealed class SteamScanner(ILibrarySource libraries, ILog? log = null)
             folderBusy |= IsDownloadFolderBusy(root, byAppId, now);
         }
 
-        return new SteamSnapshot
+        return new DownloadSnapshot
         {
             TakenAt = now,
             Apps = apps,

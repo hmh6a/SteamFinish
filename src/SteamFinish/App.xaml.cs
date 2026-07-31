@@ -12,6 +12,7 @@ using SteamFinish.Core.Power;
 using SteamFinish.Core.Settings;
 using SteamFinish.Core.Startup;
 using SteamFinish.Core.Steam;
+using SteamFinish.Core.Xbox;
 using SteamFinish.Services;
 using SteamFinish.ViewModels;
 
@@ -68,7 +69,13 @@ public partial class App : Application
         var librarySource = new AutoLibrarySource(
             () => _settings!.AutoDetectLibraries,
             () => _settings!.ManualLibraries);
-        var scanner = new SteamScanner(librarySource, _log);
+        var steamScanner = new SteamScanner(librarySource, _log);
+        var xboxScanner = new XboxScanner(log: _log);
+        var scanner = new DownloadScanner(
+            steamScanner,
+            xboxScanner,
+            () => _settings!.WatchSteam,
+            () => _settings!.WatchXbox);
         var engine = new MonitorEngine(() => _settings!.ToMonitorOptions());
         var power = new WindowsPowerController(_log);
 

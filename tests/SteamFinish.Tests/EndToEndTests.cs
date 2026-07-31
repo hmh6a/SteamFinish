@@ -206,7 +206,7 @@ public class EndToEndTests
         var stall = TimeSpan.FromSeconds(60);
         var clock = DateTimeOffset.Now;
 
-        SteamSnapshot Take(DateTimeOffset at)
+        DownloadSnapshot Take(DateTimeOffset at)
         {
             var raw = scanner.Scan(at);
             meter.Observe(raw);

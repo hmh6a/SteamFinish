@@ -38,6 +38,12 @@ public sealed record AppActivity
 
     public required string Name { get; init; }
 
+    /// <summary>
+    /// Which launcher this came from. Xbox downloads are translated into the same flags and byte
+    /// counters as Steam's, so everything downstream — the meter, the engine, the UI — is unchanged.
+    /// </summary>
+    public GamePlatform Platform { get; init; } = GamePlatform.Steam;
+
     public required AppStateFlags State { get; init; }
 
     /// <summary>Compressed bytes pulled from the network so far.</summary>
@@ -65,7 +71,7 @@ public sealed record AppActivity
     /// <summary>
     /// Steam has named a job for this app. Note that Steam often runs a download with none of these
     /// set — a queued and a downloading game can both read 1026 — so this is a positive signal only,
-    /// never proof that an app is idle. Which app is live is decided in <see cref="SteamSnapshot"/>.
+    /// never proof that an app is idle. Which app is live is decided in <see cref="DownloadSnapshot"/>.
     /// </summary>
     public bool HasJobFlags => !IsPaused && (State & WorkingMask) != 0;
 

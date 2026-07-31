@@ -1,9 +1,9 @@
 namespace SteamFinish.Core.Steam;
 
 /// <summary>An immutable read of Steam's download state at one moment.</summary>
-public sealed record SteamSnapshot
+public sealed record DownloadSnapshot
 {
-    public static SteamSnapshot Unavailable(DateTimeOffset takenAt, string error) =>
+    public static DownloadSnapshot Unavailable(DateTimeOffset takenAt, string error) =>
         new() { TakenAt = takenAt, Error = error };
 
     public required DateTimeOffset TakenAt { get; init; }
@@ -34,8 +34,17 @@ public sealed record SteamSnapshot
     /// <summary>Set when the scan could not be trusted (no libraries, unreadable folders, …).</summary>
     public string? Error { get; init; }
 
-    /// <summary>Only a reliable snapshot may be used to decide that everything has finished.</summary>
-    public bool IsReliable => Error is null && LibraryRoots.Count > 0;
+    /// <summary>One watched launcher failed while another answered; the snapshot is still usable.</summary>
+    public string? Warning { get; init; }
+
+    /// <summary>True when Gaming Services could be read, whether or not it had anything to report.</summary>
+    public bool HasXboxSource { get; init; }
+
+    /// <summary>
+    /// Only a reliable snapshot may be used to decide that everything has finished. At least one
+    /// watched launcher has to have answered.
+    /// </summary>
+    public bool IsReliable => Error is null && (LibraryRoots.Count > 0 || HasXboxSource);
 
     /// <summary>Everything with work left, in no particular order.</summary>
     public IEnumerable<AppActivity> Outstanding => Apps.Where(a => a.IsOutstanding);

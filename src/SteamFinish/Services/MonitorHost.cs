@@ -16,7 +16,7 @@ namespace SteamFinish.Services;
 /// </summary>
 public sealed class MonitorHost : IDisposable
 {
-    private readonly SteamScanner _scanner;
+    private readonly DownloadScanner _scanner;
     private readonly IPowerController _power;
     private readonly Func<AppSettings> _settings;
     private readonly ILog _log;
@@ -32,7 +32,7 @@ public sealed class MonitorHost : IDisposable
     private bool _disposed;
 
     public MonitorHost(
-        SteamScanner scanner,
+        DownloadScanner scanner,
         MonitorEngine engine,
         IPowerController power,
         TelegramNotifier telegram,
@@ -69,7 +69,7 @@ public sealed class MonitorHost : IDisposable
     public DownloadSession Session { get; } = new();
 
     /// <summary>The most recent scan, or <c>null</c> before the first one completes.</summary>
-    public SteamSnapshot? LastSnapshot { get; private set; }
+    public DownloadSnapshot? LastSnapshot { get; private set; }
 
     /// <summary>
     /// Keeps scanning while the window is on screen so the progress read-out stays live even with
@@ -95,7 +95,7 @@ public sealed class MonitorHost : IDisposable
         }
     }
 
-    public event Action<SteamSnapshot>? SnapshotUpdated;
+    public event Action<DownloadSnapshot>? SnapshotUpdated;
 
     /// <summary>Fires once per second while scanning, so the countdown display can refresh.</summary>
     public event Action? Tick;
@@ -232,7 +232,7 @@ public sealed class MonitorHost : IDisposable
             catch (Exception e)
             {
                 _log.Error("Steam scan failed.", e);
-                return SteamSnapshot.Unavailable(DateTimeOffset.Now, e.Message);
+                return DownloadSnapshot.Unavailable(DateTimeOffset.Now, e.Message);
             }
         }).ContinueWith(
             task =>
@@ -250,7 +250,7 @@ public sealed class MonitorHost : IDisposable
             TaskContinuationOptions.ExecuteSynchronously);
     }
 
-    private void CompleteScan(SteamSnapshot snapshot)
+    private void CompleteScan(DownloadSnapshot snapshot)
     {
         _scanning = false;
         if (_disposed)

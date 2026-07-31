@@ -65,6 +65,44 @@ already paused before SteamFinish started, a manifest older than two minutes giv
 Because the two cannot be told apart from disk alone, a dropped connection reads as paused too. That
 is the safe direction: either way it is not finished, and the countdown stays blocked.
 
+## Xbox app support
+
+Steam and the **Xbox app / Microsoft Store** are watched together. Tick either or both under
+**Settings → Launchers to watch**; the action waits for every ticked launcher to be finished, and
+each download carries a **Steam** or **Xbox** badge so a mixed queue stays readable.
+
+Xbox progress comes from Gaming Services' own bookkeeping, not from guessing at file sizes. Each
+in-flight install has a JSON checkpoint under
+`HKLM\SOFTWARE\Microsoft\GamingServices\StreamingCheckpoints` holding exactly what the Xbox app
+itself displays:
+
+```json
+{ "State": "Running", "Type": "Install", "QueueOrder": 0,
+  "Status": { "Operation": "Streaming",
+              "Progress": { "Package": { "TotalBytes": 77016702976, "StreamedBytes": 563023872 } } },
+  "PC": { "PackageFullName": "WarnerBros.Interactive.PHX_1.0.16.0_x64__ktmk1xygcecda" } }
+```
+
+The friendly title comes from the game's own `MicrosoftGame.config`, found by joining the checkpoint's
+content GUID to the games folder — every drive that can hold Xbox games has a hidden `.GamingRoot`
+file at its root naming that folder (`RGBX`, a version word, then a UTF-16 path), which is how the
+Xbox app locates them too.
+
+Xbox states are translated into the same vocabulary Steam uses, so the monitor engine, the transfer
+meter and the whole UI treat both platforms identically:
+
+| Checkpoint | Treated as |
+| --- | --- |
+| `State: Running`, `Operation: Streaming` | downloading |
+| `State: Running`, any other operation | installing |
+| `State` containing `Paus` | paused — blocks, exactly like Steam |
+| Queued, suspended, or a state this build has not seen | outstanding (blocks; the safe direction) |
+| Fully streamed and no longer running | finished |
+
+> `AppInstallManager`, the documented WinRT install API, is deliberately not used: it only reports
+> installs the calling app started itself, so it cannot see the Xbox app's downloads. Verified empty
+> on a machine that was actively downloading.
+
 ## How "finished" is decided
 
 Every library's `steamapps\appmanifest_*.acf` file is parsed and its `StateFlags` inspected:
@@ -268,6 +306,8 @@ Stored in `%AppData%\SteamFinish\settings.json` and saved automatically.
 | `StalledAfterSeconds` | `60` | Standstill before a download reads as paused; JSON only |
 | `Language` | `English` | Interface language: `English` or `Arabic` |
 | `Theme` | `System` | `System`, `Light` or `Dark` |
+| `WatchSteam` | `true` | Watch Steam downloads |
+| `WatchXbox` | `true` | Watch Xbox app / Microsoft Store installs |
 | `Telegram.ChatLabels` | `{}` | Cached chat names for the list; cosmetic, refreshed automatically |
 | `Telegram.Enabled` | `false` | Send Telegram messages |
 | `Telegram.BotToken` | `""` | Token from @BotFather |
@@ -302,8 +342,8 @@ returns the next phase, which is why the timing rules can be tested without wait
 ## Not implemented
 
 Listed in the specification under future improvements: Epic Games, EA App, Ubisoft Connect,
-Battle.net, Xbox App and GOG Galaxy support, multi-platform monitoring, ntfy notifications, and a
-dark theme. (Telegram notifications and event logging are done.)
+Battle.net and GOG Galaxy support, and ntfy notifications. (Xbox app support, multi-platform
+monitoring, Telegram notifications, event logging and the dark theme are done.)
 
 ---
 
@@ -333,6 +373,10 @@ dark theme. (Telegram notifications and event logging are done.)
   حتى لا تظهر `0 bps` بصيغة `bps 0`.
 - رسائل التقدّم كل ٥٪ تُرسَل حتى لو كانت المراقبة متوقفة، لأنها تصف التنزيل لا الإطفاء.
 - **وضع داكن وفاتح**، مع خيار "حسب ويندوز" الذي يتبع إعداد النظام ويتغيّر معه أثناء التشغيل.
+- **دعم تطبيق Xbox / متجر مايكروسوفت** إلى جانب Steam: يمكن تفعيل أي منهما أو كليهما، ولا يُنفَّذ
+  الإجراء إلا بعد انتهاء تنزيلات كل منصّة مفعّلة. وكل تنزيل يحمل **تاك** يبيّن مصدره (Steam أو Xbox).
+- تُقرأ نسبة تنزيلات Xbox من سجلّ Gaming Services نفسه — نفس الأرقام التي يعرضها تطبيق Xbox — ويُقرأ
+  اسم اللعبة من ملف `MicrosoftGame.config` الخاص بها.
 - يرسل إشعارات تلكرام: عند بدء التحميل، وكل ٥٪ تقدّم، ورسالة مرتبة قبل الإطفاء تذكر الألعاب
   وأحجامها والمدة والسرعة — مع زر لتجربة الإرسال والتأكد من التوكن والجات آيدي.
 - انقطاع الإنترنت أو إيقاف التنزيل مؤقتاً **لا يعتبر** انتهاء تحميل.

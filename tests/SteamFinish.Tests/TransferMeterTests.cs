@@ -8,7 +8,7 @@ public class TransferMeterTests
 {
     private static readonly DateTimeOffset Start = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private static SteamSnapshot At(DateTimeOffset when, long downloaded, long staged = 0, long toDownload = 1_000_000) =>
+    private static DownloadSnapshot At(DateTimeOffset when, long downloaded, long staged = 0, long toDownload = 1_000_000) =>
         Snapshot(App(
             AppStateFlags.UpdateStarted | AppStateFlags.Locked,
             downloaded: downloaded,

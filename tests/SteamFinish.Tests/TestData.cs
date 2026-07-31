@@ -23,7 +23,7 @@ internal static class TestData
         LibraryPath = @"C:\Steam",
     };
 
-    public static SteamSnapshot Snapshot(params AppActivity[] apps) => new()
+    public static DownloadSnapshot Snapshot(params AppActivity[] apps) => new()
     {
         TakenAt = DateTimeOffset.UnixEpoch,
         Apps = apps,
@@ -31,13 +31,13 @@ internal static class TestData
         SteamRunning = true,
     };
 
-    public static SteamSnapshot Idle() => Snapshot(App(AppStateFlags.FullyInstalled));
+    public static DownloadSnapshot Idle() => Snapshot(App(AppStateFlags.FullyInstalled));
 
-    public static SteamSnapshot Downloading() =>
+    public static DownloadSnapshot Downloading() =>
         Snapshot(App(AppStateFlags.UpdateRunning | AppStateFlags.Downloading, downloaded: 50, toDownload: 100));
 
-    public static SteamSnapshot Unavailable() =>
-        SteamSnapshot.Unavailable(DateTimeOffset.UnixEpoch, "libraries missing");
+    public static DownloadSnapshot Unavailable() =>
+        DownloadSnapshot.Unavailable(DateTimeOffset.UnixEpoch, "libraries missing");
 }
 
 /// <summary>A throwaway directory that cleans itself up at the end of a test.</summary>

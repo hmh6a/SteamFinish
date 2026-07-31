@@ -48,7 +48,7 @@ public sealed class TransferMeter
     public bool IsStalled(DateTimeOffset now, TimeSpan threshold) =>
         LastMovementAt is { } moved && now - moved > threshold;
 
-    public void Observe(SteamSnapshot snapshot)
+    public void Observe(DownloadSnapshot snapshot)
     {
         if (!snapshot.IsReliable)
         {
@@ -168,7 +168,7 @@ public sealed class TransferMeter
         }
     }
 
-    private TimeSpan? EstimateEta(SteamSnapshot snapshot)
+    private TimeSpan? EstimateEta(DownloadSnapshot snapshot)
     {
         var remaining = snapshot.TotalDownloadBytesRemaining;
         if (remaining <= 0 || NetworkBytesPerSecond < 1024)

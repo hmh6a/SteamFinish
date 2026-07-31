@@ -1,0 +1,69 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "GameArabizer.SamplePlugin/1.0.0-beta.1": {
+        "runtime": {
+          "GameArabizer.SamplePlugin.dll": {}
+        }
+      },
+      "GameArabizer.Application/1.0.0-beta.1": {
+        "dependencies": {
+          "GameArabizer.Domain": "1.0.0-beta.1",
+          "GameArabizer.Engine.Abstractions": "1.0.0-beta.1"
+        },
+        "runtime": {
+          "GameArabizer.Application.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "GameArabizer.Domain/1.0.0-beta.1": {
+        "runtime": {
+          "GameArabizer.Domain.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "GameArabizer.Engine.Abstractions/1.0.0-beta.1": {
+        "dependencies": {
+          "GameArabizer.Domain": "1.0.0-beta.1"
+        },
+        "runtime": {
+          "GameArabizer.Engine.Abstractions.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "GameArabizer.SamplePlugin/1.0.0-beta.1": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "GameArabizer.Application/1.0.0-beta.1": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "GameArabizer.Domain/1.0.0-beta.1": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "GameArabizer.Engine.Abstractions/1.0.0-beta.1": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

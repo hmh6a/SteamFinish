@@ -12,6 +12,7 @@ public sealed class QueueItemViewModel : ObservableObject
     private string _name = string.Empty;
     private string _stateText = string.Empty;
     private string _sizeText = string.Empty;
+    private string _platformText = string.Empty;
     private double _percent;
     private bool _isWorking;
     private Brush _accent = Brushes.Gray;
@@ -58,10 +59,18 @@ public sealed class QueueItemViewModel : ObservableObject
         private set => SetProperty(ref _accent, value);
     }
 
+    /// <summary>"Steam" or "Xbox", shown so a mixed queue stays readable.</summary>
+    public string PlatformText
+    {
+        get => _platformText;
+        private set => SetProperty(ref _platformText, value);
+    }
+
     public void Update(AppActivity app, bool isLive)
     {
         AppId = app.AppId;
         Name = app.Name;
+        PlatformText = Loc.Get($"Platform.{app.Platform}");
         IsWorking = isLive && !app.IsPaused;
         Percent = (app.Progress ?? 0) * 100;
 

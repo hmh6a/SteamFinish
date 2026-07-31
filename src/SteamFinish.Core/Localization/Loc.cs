@@ -127,6 +127,19 @@ public sealed class Loc : INotifyPropertyChanged
             "Unsaved work in other apps is lost when this is on.",
             "العمل غير المحفوظ في البرامج الأخرى سيُفقد عند تفعيل هذا."),
 
+        // ---------------------------------------------------------------- Settings: launchers
+        ["Settings.Launchers"] = ("Launchers to watch", "المنصّات المراقَبة"),
+        ["Settings.WatchSteam"] = ("Steam", "Steam"),
+        ["Settings.WatchXbox"] = ("Xbox app / Microsoft Store", "تطبيق Xbox / متجر مايكروسوفت"),
+        ["Settings.LaunchersHint"] = (
+            "Downloads from every ticked launcher have to finish before the action runs.",
+            "يجب أن تنتهي تنزيلات كل منصّة مفعّلة قبل تنفيذ الإجراء."),
+        ["Platform.Steam"] = ("Steam", "Steam"),
+        ["Platform.Xbox"] = ("Xbox", "Xbox"),
+        ["Status.XboxUnavailable"] = (
+            "The Xbox app was not found.",
+            "لم يُعثر على تطبيق Xbox."),
+
         // ---------------------------------------------------------------- Settings: libraries
         ["Settings.Libraries"] = ("Steam libraries", "مكتبات Steam"),
         ["Settings.AutoDetect"] = ("Detect Steam libraries automatically", "اكتشاف مكتبات Steam تلقائياً"),

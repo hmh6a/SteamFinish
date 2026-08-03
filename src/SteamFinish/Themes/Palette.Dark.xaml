@@ -26,6 +26,11 @@
     <SolidColorBrush x:Key="ScrollThumbBrush" Color="#FF354356" />
     <SolidColorBrush x:Key="ScrollThumbHoverBrush" Color="#FF4C5D73" />
 
+    <!-- Launcher badge colours: Steam blue and Xbox green, brightened for a dark surface. -->
+    <SolidColorBrush x:Key="PlatformSteamBrush" Color="#FF66C0F4" />
+    <SolidColorBrush x:Key="PlatformSteamSoftBrush" Color="#FF14293B" />
+    <SolidColorBrush x:Key="PlatformXboxBrush" Color="#FF6CC644" />
+    <SolidColorBrush x:Key="PlatformXboxSoftBrush" Color="#FF152917" />
     <SolidColorBrush x:Key="HeaderSubtitleBrush" Color="#FF7FA8C8" />
     <LinearGradientBrush x:Key="HeaderBrush" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#FF121C27" Offset="0" />

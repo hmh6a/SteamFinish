@@ -13,6 +13,8 @@ public sealed class QueueItemViewModel : ObservableObject
     private string _stateText = string.Empty;
     private string _sizeText = string.Empty;
     private string _platformText = string.Empty;
+    private Brush _platformBrush = Brushes.Gray;
+    private Brush _platformSoftBrush = Brushes.Transparent;
     private double _percent;
     private bool _isWorking;
     private Brush _accent = Brushes.Gray;
@@ -66,11 +68,26 @@ public sealed class QueueItemViewModel : ObservableObject
         private set => SetProperty(ref _platformText, value);
     }
 
+    /// <summary>Steam blue or Xbox green, for the badge text and border.</summary>
+    public Brush PlatformBrush
+    {
+        get => _platformBrush;
+        private set => SetProperty(ref _platformBrush, value);
+    }
+
+    public Brush PlatformSoftBrush
+    {
+        get => _platformSoftBrush;
+        private set => SetProperty(ref _platformSoftBrush, value);
+    }
+
     public void Update(AppActivity app, bool isLive)
     {
         AppId = app.AppId;
         Name = app.Name;
         PlatformText = Loc.Get($"Platform.{app.Platform}");
+        PlatformBrush = PlatformBrushes.Strong(app.Platform);
+        PlatformSoftBrush = PlatformBrushes.Soft(app.Platform);
         IsWorking = isLive && !app.IsPaused;
         Percent = (app.Progress ?? 0) * 100;
 

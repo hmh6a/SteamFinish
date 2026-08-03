@@ -12,6 +12,7 @@ using SteamFinish.Core.Power;
 using SteamFinish.Core.Settings;
 using SteamFinish.Core.Startup;
 using SteamFinish.Core.Steam;
+using SteamFinish.Core.Updates;
 using SteamFinish.Core.Xbox;
 using SteamFinish.Services;
 using SteamFinish.ViewModels;
@@ -25,6 +26,7 @@ public partial class App : Application
     private FileLog? _log;
     private AppSettings? _settings;
     private TelegramClient? _telegramClient;
+    private UpdateService? _updates;
     private MonitorHost? _host;
     private MainViewModel? _viewModel;
     private TrayIcon? _tray;
@@ -83,7 +85,8 @@ public partial class App : Application
         var telegram = new TelegramNotifier(() => _settings!.Telegram, _telegramClient, _log, _telegramClient);
 
         _host = new MonitorHost(scanner, engine, power, telegram, () => _settings!, _log);
-        _viewModel = new MainViewModel(store, _settings, _host, librarySource, _telegramClient, _log);
+        _updates = new UpdateService(_settings.UpdateRepository, _log);
+        _viewModel = new MainViewModel(store, _settings, _host, librarySource, _telegramClient, _updates, _log);
 
         _tray = new TrayIcon();
         _tray.ShowRequested += ShowMainWindow;
@@ -231,6 +234,7 @@ public partial class App : Application
         _viewModel?.Dispose();
         _host?.Dispose();
         _telegramClient?.Dispose();
+        _updates?.Dispose();
         _tray?.Dispose();
         _instance?.Dispose();
         base.OnExit(e);

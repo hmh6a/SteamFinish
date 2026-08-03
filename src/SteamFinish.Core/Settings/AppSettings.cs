@@ -67,6 +67,12 @@ public sealed class AppSettings
     /// <summary>Light, dark, or whatever Windows itself is set to.</summary>
     public AppTheme Theme { get; set; } = AppTheme.System;
 
+    /// <summary>The GitHub repository, as owner/name, that updates are fetched from.</summary>
+    public string UpdateRepository { get; set; } = "hmh6a/SteamFinish";
+
+    /// <summary>Look for a newer release shortly after start-up.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
     /// <summary>
     /// How long the counters must sit still before the download is reported as paused. Generous by
     /// default because Steam rewrites its manifests in bursts, not continuously.

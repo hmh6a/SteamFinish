@@ -14,6 +14,7 @@ using SteamFinish.Core.Power;
 using SteamFinish.Core.Settings;
 using SteamFinish.Core.Startup;
 using SteamFinish.Core.Steam;
+using SteamFinish.Core.Updates;
 using SteamFinish.Services;
 
 namespace SteamFinish.ViewModels;
@@ -30,6 +31,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private readonly RelayCommand _cancelCommand;
     private readonly RelayCommand _removeLibraryCommand;
+    private readonly RelayCommand _checkUpdateCommand;
+    private readonly RelayCommand _installUpdateCommand;
     private readonly RelayCommand _findChatCommand;
     private readonly RelayCommand _confirmChatCommand;
     private readonly RelayCommand _cancelPairingCommand;
@@ -65,6 +68,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _isPaused;
     private string _platformText = string.Empty;
     private bool _hasPlatform;
+    private Brush _platformBrush = Brushes.Gray;
+    private Brush _platformSoftBrush = Brushes.Transparent;
 
     private string _chatIdInput = string.Empty;
     private ChatEntryViewModel? _selectedChatId;
@@ -73,6 +78,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _showBotToken;
 
     private readonly ITelegramChatFinder _chatFinder;
+    private readonly UpdateService? _updates;
+    private UpdateInfo? _pendingUpdate;
+    private string _updateStatus = string.Empty;
+    private bool _updateAvailable;
+    private bool _updateBusy;
     private CancellationTokenSource? _pairing;
     private DiscoveredChat? _pairedChat;
     private long? _pairedMessageId;
@@ -86,8 +96,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         MonitorHost host,
         AutoLibrarySource librarySource,
         ITelegramChatFinder chatFinder,
+        UpdateService? updates,
         FileLog? log)
     {
+        _updates = updates;
         _store = store;
         _settings = settings;
         _host = host;
@@ -111,6 +123,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _addChatIdCommand = new RelayCommand(AddChatId, () => !string.IsNullOrWhiteSpace(_chatIdInput));
         _removeChatIdCommand = new RelayCommand(RemoveChatId, () => _selectedChatId is not null);
         _testTelegramCommand = new RelayCommand(TestTelegram, () => !_telegramBusy);
+        _checkUpdateCommand = new RelayCommand(() => _ = CheckUpdatesAsync(announceUpToDate: true), () => !_updateBusy);
+        _installUpdateCommand = new RelayCommand(InstallUpdate, () => !_updateBusy && _pendingUpdate is not null);
         _findChatCommand = new RelayCommand(FindChat, () => _pairingStage != PairingStage.Listening);
         _confirmChatCommand = new RelayCommand(ConfirmChat, () => _pairingStage == PairingStage.AwaitingConfirmation);
         _cancelPairingCommand = new RelayCommand(CancelPairing, () => _pairingStage != PairingStage.Idle);
@@ -137,6 +151,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _settings.StartWithWindows = StartupRegistrar.IsEnabled();
 
         DescribeKnownChats();
+
+        if (_settings.CheckForUpdates)
+        {
+            // Quiet on start-up: it only speaks up when there is actually something newer.
+            _ = CheckUpdatesAsync(announceUpToDate: false);
+        }
 
         // Brushes resolved in code (the phase dot, the queue accents) hold a reference to the old
         // palette, so they are re-fetched after a swap.
@@ -326,6 +346,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _platformText, value);
     }
 
+    /// <summary>Steam blue or Xbox green, for the badge beside the status line.</summary>
+    public Brush PlatformBrush
+    {
+        get => _platformBrush;
+        private set => SetProperty(ref _platformBrush, value);
+    }
+
+    public Brush PlatformSoftBrush
+    {
+        get => _platformSoftBrush;
+        private set => SetProperty(ref _platformSoftBrush, value);
+    }
+
     /// <summary>False when nothing is outstanding, so the badge is not shown over an empty status.</summary>
     public bool HasPlatform
     {
@@ -484,6 +517,50 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Arabic lays the whole window out right-to-left.</summary>
     public FlowDirection FlowDirection =>
         Loc.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+
+    // ---------------------------------------------------------------- Updates
+
+    /// <summary>"You are running 1.2.0" — the build actually executing.</summary>
+    public string CurrentVersionText => Loc.F("Update.Current", UpdateService.CurrentVersion);
+
+    /// <summary>Short form for the header strip.</summary>
+    public string VersionBadge => "v" + UpdateService.CurrentVersion;
+
+    public string UpdateStatus
+    {
+        get => _updateStatus;
+        private set => SetProperty(ref _updateStatus, value);
+    }
+
+    /// <summary>True once a newer release has been found, which reveals the install button.</summary>
+    public bool UpdateAvailable
+    {
+        get => _updateAvailable;
+        private set => SetProperty(ref _updateAvailable, value);
+    }
+
+    public bool UpdateBusy
+    {
+        get => _updateBusy;
+        private set
+        {
+            if (SetProperty(ref _updateBusy, value))
+            {
+                _checkUpdateCommand.RaiseCanExecuteChanged();
+                _installUpdateCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public RelayCommand CheckUpdateCommand => _checkUpdateCommand;
+
+    public RelayCommand InstallUpdateCommand => _installUpdateCommand;
+
+    public bool CheckForUpdates
+    {
+        get => _settings.CheckForUpdates;
+        set => SetSetting(_settings.CheckForUpdates == value, () => _settings.CheckForUpdates = value);
+    }
 
     public AppTheme Theme
     {
@@ -870,6 +947,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var isLive = snapshot.IsLive(app);
         IsDownloadPaused = snapshot.IsPausedOrStalled(app);
         PlatformText = Loc.Get($"Platform.{app.Platform}");
+        PlatformBrush = PlatformBrushes.Strong(app.Platform);
+        PlatformSoftBrush = PlatformBrushes.Soft(app.Platform);
         HasPlatform = true;
 
         DownloadingName = app.Name;
@@ -980,11 +1059,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void OnThemeChanged()
     {
-        RefreshPhase();
-
         if (_host.LastSnapshot is { } snapshot)
         {
-            SyncQueue(snapshot);
+            // Re-projects the snapshot so every brush resolved in code comes from the new palette.
+            OnSnapshotUpdated(snapshot);
+        }
+        else
+        {
+            RefreshPhase();
         }
     }
 
@@ -1349,6 +1431,92 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (Exception e)
         {
             PairingStatus = $"✕ Could not open {url}: {e.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Asks GitHub whether there is a newer release. Quiet unless something is found, except when
+    /// the user pressed the button themselves and deserves an answer either way.
+    /// </summary>
+    public async Task CheckUpdatesAsync(bool announceUpToDate)
+    {
+        if (_updates is null || _updateBusy)
+        {
+            return;
+        }
+
+        UpdateBusy = true;
+        UpdateStatus = Loc.Get("Update.Checking");
+
+        try
+        {
+            var result = await _updates.CheckAsync().ConfigureAwait(true);
+
+            if (result.Available is { } update)
+            {
+                _pendingUpdate = update;
+                UpdateAvailable = true;
+                UpdateStatus = Loc.F("Update.Available", update.Version);
+                Notification?.Invoke(
+                    "SteamFinish",
+                    Loc.F("Update.Available", update.Version),
+                    NotificationKind.Info);
+            }
+            else
+            {
+                _pendingUpdate = null;
+                UpdateAvailable = false;
+                UpdateStatus = result.Checked
+                    ? announceUpToDate ? Loc.Get("Update.UpToDate") : string.Empty
+                    : announceUpToDate ? Loc.F("Update.Failed", result.Message) : string.Empty;
+            }
+        }
+        catch (Exception e)
+        {
+            UpdateStatus = Loc.F("Update.Failed", e.Message);
+        }
+        finally
+        {
+            UpdateBusy = false;
+            _installUpdateCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    /// <summary>
+    /// Downloads the release and hands over to the swap script, which restarts the app. The app
+    /// closes itself so the running executable can be replaced.
+    /// </summary>
+    private async void InstallUpdate()
+    {
+        if (_updates is null || _pendingUpdate is not { } update)
+        {
+            return;
+        }
+
+        UpdateBusy = true;
+        var progress = new Progress<double>(fraction =>
+            UpdateStatus = Loc.F("Update.Downloading", (int)(fraction * 100)));
+
+        try
+        {
+            var failure = await _updates.InstallAsync(update, progress).ConfigureAwait(true);
+            if (failure is not null)
+            {
+                UpdateStatus = Loc.F("Update.Failed", failure);
+                UpdateBusy = false;
+                return;
+            }
+
+            UpdateStatus = Loc.Get("Update.Restarting");
+            SaveNow();
+
+            // The swap script is already waiting for this process to go away.
+            Application.Current?.Shutdown();
+        }
+        catch (Exception e)
+        {
+            UpdateStatus = Loc.F("Update.Failed", e.Message);
+            UpdateBusy = false;
         }
     }
 

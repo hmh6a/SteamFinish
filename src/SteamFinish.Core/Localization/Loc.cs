@@ -160,9 +160,25 @@ public sealed class Loc : INotifyPropertyChanged
         ["Language.English"] = ("English", "English"),
         ["Language.Arabic"] = ("العربية", "العربية"),
 
+        // ---------------------------------------------------------------- Updates
+        ["Update.Title"] = ("Version", "الإصدار"),
+        ["Update.Current"] = ("You are running {0}", "أنت تستخدم الإصدار {0}"),
+        ["Update.Check"] = ("Check for updates", "التحقق من التحديثات"),
+        ["Update.Checking"] = ("Checking…", "جارٍ التحقق…"),
+        ["Update.UpToDate"] = ("This is the latest version.", "هذه أحدث نسخة."),
+        ["Update.Available"] = ("Version {0} is available", "الإصدار {0} متاح"),
+        ["Update.Install"] = ("Download and install", "تنزيل وتثبيت"),
+        ["Update.Downloading"] = ("Downloading… {0}%", "جارٍ التنزيل… {0}%"),
+        ["Update.Restarting"] = (
+            "Installing — SteamFinish will close and reopen.",
+            "جارٍ التثبيت — سيُغلق SteamFinish ويُفتح من جديد."),
+        ["Update.AutoCheck"] = ("Check for updates on start-up", "التحقق من التحديثات عند التشغيل"),
+        ["Update.Failed"] = ("Update failed: {0}", "فشل التحديث: {0}"),
+
         // ---------------------------------------------------------------- Appearance
         ["Settings.Appearance"] = ("Appearance", "المظهر"),
-        ["Theme.System"] = ("Match Windows", "حسب ويندوز"),
+        // Short on purpose: three tiles share one row, and "Match Windows" gets clipped.
+        ["Theme.System"] = ("System", "النظام"),
         ["Theme.Light"] = ("Light", "فاتح"),
         ["Theme.Dark"] = ("Dark", "داكن"),
 

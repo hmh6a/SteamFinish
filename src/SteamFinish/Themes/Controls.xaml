@@ -10,7 +10,7 @@
     <!-- ==================== Text ==================== -->
     <Style x:Key="SectionTitle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
         <Setter Property="Margin" Value="0,0,0,10" />
@@ -37,11 +37,11 @@
     </Style>
 
     <Style x:Key="BarLabel" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
     </Style>
 
     <Style x:Key="BarValue" TargetType="TextBlock" BasedOn="{StaticResource BodyText}">
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="TextAlignment" Value="Right" />
     </Style>
@@ -71,6 +71,13 @@
         <Setter Property="Padding" Value="18" />
         <Setter Property="Margin" Value="0,0,0,14" />
         <Setter Property="Effect" Value="{DynamicResource CardShadow}" />
+
+        <!-- An Effect renders the subtree through an intermediate surface, which silently turns
+             ClearType off and leaves every label inside the card looking soft. The card background
+             is opaque, so ClearType can simply be switched back on. -->
+        <Setter Property="RenderOptions.ClearTypeHint" Value="Enabled" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
     </Style>
 
     <!-- A tinted panel inside a card, for the chat-pairing block -->
@@ -203,12 +210,12 @@
                     <Border x:Name="Chrome"
                             Background="{DynamicResource CardBrush}"
                             BorderBrush="{DynamicResource CardBorderBrush}"
-                            BorderThickness="1.4"
+                            BorderThickness="1"
                             CornerRadius="10"
                             Padding="13,11">
                         <StackPanel Orientation="Horizontal">
                             <Grid Width="17" Height="17" VerticalAlignment="Center" Margin="0,0,11,0">
-                                <Ellipse x:Name="Ring" Stroke="{DynamicResource DisabledBrush}" StrokeThickness="1.6" />
+                                <Ellipse x:Name="Ring" Stroke="{DynamicResource DisabledBrush}" StrokeThickness="2" />
                                 <Ellipse x:Name="Dot" Width="9" Height="9"
                                          Fill="{DynamicResource AccentBrush}" Visibility="Collapsed" />
                             </Grid>
@@ -261,7 +268,7 @@
                                 VerticalAlignment="Center" Margin="0,0,11,0"
                                 Background="{DynamicResource CardBrush}"
                                 BorderBrush="{DynamicResource BorderStrongBrush}"
-                                BorderThickness="1.6">
+                                BorderThickness="2">
                             <Path x:Name="Tick"
                                   Data="M 0 3.6 L 3.1 6.9 L 8.8 0.7"
                                   Stroke="{DynamicResource OnAccentBrush}" StrokeThickness="2"
@@ -308,7 +315,7 @@
                     <Border x:Name="Chrome" CornerRadius="8"
                             Background="{DynamicResource CardBrush}"
                             BorderBrush="{DynamicResource CardBorderBrush}"
-                            BorderThickness="1.4">
+                            BorderThickness="1">
                         <ScrollViewer x:Name="PART_ContentHost"
                                       Margin="{TemplateBinding Padding}"
                                       VerticalAlignment="Center" />
@@ -331,7 +338,7 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Background" Value="{DynamicResource CardBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1.4" />
+        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         <Setter Property="Padding" Value="4" />
         <Setter Property="MinHeight" Value="66" />
@@ -419,7 +426,7 @@
                         <ContentPresenter ContentSource="Header" x:Name="Label"
                                           Margin="18,12"
                                           TextBlock.Foreground="{DynamicResource TextSecondaryBrush}" />
-                        <Border x:Name="Underline" Height="2.5" VerticalAlignment="Bottom"
+                        <Border x:Name="Underline" Height="2" VerticalAlignment="Bottom"
                                 CornerRadius="2" Background="Transparent" Margin="10,0" />
                     </Grid>
                     <ControlTemplate.Triggers>

@@ -319,16 +319,29 @@ runtime is bundled, so there is nothing to install), zips it with a `.sha256` be
 the GitHub release. Re-running it for the same tag replaces the assets instead of failing. You can
 also trigger it by hand from the Actions tab and type the version in.
 
+### Updating from inside the app
+
+The running version is shown in the header (`v1.0.0`) and under **Settings → Version**. The app asks
+GitHub for the newest release on start-up — quietly, only speaking up when there is something newer —
+and **Check for updates** asks on demand.
+
+When a newer release exists, **Download and install** fetches it, checks it against the published
+SHA256, and hands over to a small script that waits for the app to close, swaps the files and starts
+the new build. A running executable cannot overwrite itself, which is why the swap happens after exit.
+
+Automatic checking can be turned off, and the repository it checks is `UpdateRepository` in the
+settings file.
+
 ### Updating the copy on your Desktop
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/OWNER/REPO/main/tools/Update-SteamFinish.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/hmh6a/SteamFinish/main/tools/Update-SteamFinish.ps1 | iex
 ```
 
 Or, from a checkout:
 
 ```powershell
-.\tools\Update-SteamFinish.ps1 -Repo OWNER/REPO
+.\tools\Update-SteamFinish.ps1 -Repo hmh6a/SteamFinish
 ```
 
 It fetches the newest release, checks it against the published SHA256, closes a running SteamFinish,
@@ -370,6 +383,8 @@ Stored in `%AppData%\SteamFinish\settings.json` and saved automatically.
 | `Theme` | `System` | `System`, `Light` or `Dark` |
 | `WatchSteam` | `true` | Watch Steam downloads |
 | `WatchXbox` | `true` | Watch Xbox app / Microsoft Store installs |
+| `UpdateRepository` | `hmh6a/SteamFinish` | GitHub repository updates are fetched from |
+| `CheckForUpdates` | `true` | Look for a newer release on start-up |
 | `Telegram.ChatLabels` | `{}` | Cached chat names for the list; cosmetic, refreshed automatically |
 | `Telegram.Enabled` | `false` | Send Telegram messages |
 | `Telegram.BotToken` | `""` | Token from @BotFather |
@@ -439,6 +454,9 @@ monitoring, Telegram notifications, event logging and the dark theme are done.)
   الإجراء إلا بعد انتهاء تنزيلات كل منصّة مفعّلة. وكل تنزيل يحمل **تاك** يبيّن مصدره (Steam أو Xbox).
 - تُقرأ نسبة تنزيلات Xbox من سجلّ Gaming Services نفسه — نفس الأرقام التي يعرضها تطبيق Xbox — ويُقرأ
   اسم اللعبة من ملف `MicrosoftGame.config` الخاص بها.
+- **رقم الإصدار يظهر داخل البرنامج** (في الترويسة وفي الإعدادات)، وزر **تنزيل وتثبيت** يظهر تلقائياً
+  عند وجود إصدار أحدث: ينزّله ويتحقق من بصمته ثم يستبدل البرنامج ويعيد تشغيله.
+- **تاك بلون كل منصّة**: أزرق Steam وأخضر Xbox.
 - **بناء ونشر تلقائي عبر GitHub Actions**: عند دفع وسم `v1.0.0` يُبنى البرنامج ويُختبر ويُنشَر
   إصدار فيه ملف `.exe` واحد مكتفٍ ذاتياً (لا يحتاج تثبيت .NET)، مع بصمة SHA256.
 - **أمر تحديث واحد** يستبدل النسخة على سطح المكتب بآخر إصدار، ويتحقق من البصمة، ولا يمسّ إعداداتك

@@ -13,7 +13,7 @@
     <RootNamespace>SteamFinish</RootNamespace>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>SteamFinish</Product>
     <Description>Shuts the PC down once Steam finishes downloading.</Description>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

@@ -315,9 +315,29 @@ git push origin v1.0.0
 ```
 
 The workflow publishes a **self-contained single-file** `SteamFinish.exe` (~148 MB — the .NET
-runtime is bundled, so there is nothing to install), zips it with a `.sha256` beside it, and creates
-the GitHub release. Re-running it for the same tag replaces the assets instead of failing. You can
-also trigger it by hand from the Actions tab and type the version in.
+runtime is bundled) and attaches two ways to get it, each with a `.sha256` beside it:
+
+| Asset | For |
+| --- | --- |
+| `SteamFinish-<version>-setup.exe` | The installer: asks where to install and whether to add a Desktop shortcut |
+| `SteamFinish-<version>-win-x64.zip` | Portable — unzip and run |
+
+Re-running the workflow for the same tag replaces the assets instead of failing. You can also
+trigger it by hand from the Actions tab and type the version in.
+
+### The installer
+
+Built from [installer/SteamFinish.iss](installer/SteamFinish.iss) with Inno Setup, which the
+workflow installs on the runner. The wizard shows its normal pages, so you choose:
+
+- **where to install** — per-user by default (`%LocalAppData%\Programs\SteamFinish`), so no
+  administrator prompt; the wizard still offers an all-users install
+- **a Desktop shortcut** — a tick box
+- **start with Windows** — an optional tick box, writing the same registry value the app itself uses
+
+It carries a fixed `AppId`, so installing a newer build upgrades the existing one rather than adding
+a second entry to Apps & features, and it offers to close a running copy instead of failing on a
+locked file. Uninstalling leaves `%AppData%\SteamFinish` alone, so settings survive a reinstall.
 
 ### Updating from inside the app
 
@@ -459,6 +479,8 @@ monitoring, Telegram notifications, event logging and the dark theme are done.)
 - **تاك بلون كل منصّة**: أزرق Steam وأخضر Xbox.
 - **بناء ونشر تلقائي عبر GitHub Actions**: عند دفع وسم `v1.0.0` يُبنى البرنامج ويُختبر ويُنشَر
   إصدار فيه ملف `.exe` واحد مكتفٍ ذاتياً (لا يحتاج تثبيت .NET)، مع بصمة SHA256.
+- **مُنصِّب** يسألك **أين تريد التنصيب** وهل تريد **اختصاراً على سطح المكتب** (وخيار التشغيل مع
+  ويندوز). تنصيب لمستخدمك بلا صلاحيات مدير، ويحدّث النسخة الموجودة بدل تكرارها.
 - **أمر تحديث واحد** يستبدل النسخة على سطح المكتب بآخر إصدار، ويتحقق من البصمة، ولا يمسّ إعداداتك
   في `%AppData%\SteamFinish`. ولا يحذف أي مجلد إلا إذا تأكّد أنه يحتوي `SteamFinish.exe`.
 - **زرّان في رسالة الانتهاء على تيليجرام**: «⚡ أطفئ الآن» ينفّذ فوراً دون انتظار العد التنازلي،

@@ -75,19 +75,22 @@ public static class ReleaseReader
                 return null;
             }
 
+            // A release carries both an installer and a portable zip, each with its own .sha256.
+            // The checksums are matched by file name — pairing them by order would verify the zip
+            // against the installer's hash and reject a perfectly good download.
+            var checksums = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             JsonElement? zip = null;
-            string? checksumUrl = null;
 
             foreach (var asset in assets.EnumerateArray())
             {
                 var name = Text(asset, "name");
-                if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                if (name.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase))
+                {
+                    checksums[name[..^".sha256".Length]] = Text(asset, "browser_download_url");
+                }
+                else if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 {
                     zip ??= asset;
-                }
-                else if (name.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase))
-                {
-                    checksumUrl = Text(asset, "browser_download_url");
                 }
             }
 
@@ -96,12 +99,14 @@ public static class ReleaseReader
                 return null;
             }
 
+            var payloadName = Text(payload, "name");
+
             return new UpdateInfo(
                 Version: tag.TrimStart('v', 'V'),
                 Tag: tag,
                 DownloadUrl: Text(payload, "browser_download_url"),
                 SizeBytes: payload.TryGetProperty("size", out var size) && size.TryGetInt64(out var bytes) ? bytes : 0,
-                ChecksumUrl: checksumUrl,
+                ChecksumUrl: checksums.GetValueOrDefault(payloadName),
                 ReleaseUrl: Text(root, "html_url"));
         }
         catch (JsonException)

@@ -63,19 +63,36 @@ jobs:
             -p:Version=${{ steps.version.outputs.version }} `
             --output publish
 
-      - name: Package
+      - name: Build the installer
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          $zip = "artifacts/SteamFinish-${{ steps.version.outputs.version }}-win-x64.zip"
 
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            Write-Host 'Inno Setup is not on the image; installing it.'
+            choco install innosetup --no-progress -y
+          }
+
+          if (-not (Test-Path $iscc)) { throw "Inno Setup was not found at $iscc." }
+
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" /O"artifacts" installer\SteamFinish.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE." }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          # The portable zip, for anyone who would rather not run an installer.
+          $zip = "artifacts/SteamFinish-${{ steps.version.outputs.version }}-win-x64.zip"
           Compress-Archive -Path publish/SteamFinish.exe -DestinationPath $zip -Force
 
-          # Published next to the zip so a download can be checked before it is run.
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
-          "$hash  $(Split-Path -Leaf $zip)" | Out-File "$zip.sha256" -Encoding ascii
+          # A checksum beside every artifact, so a download can be checked before it is run.
+          foreach ($file in Get-ChildItem artifacts -File | Where-Object { $_.Extension -ne '.sha256' }) {
+            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash
+            "$hash  $($file.Name)" | Out-File "$($file.FullName).sha256" -Encoding ascii
+            Write-Host "$($file.Name)  $hash"
+          }
 
-          Write-Host "SHA256 $hash"
           Get-ChildItem artifacts | Format-Table Name, Length
 
       - name: Write the release notes
@@ -83,8 +100,13 @@ jobs:
         run: |
           # A literal here-string: the notes contain backticks, which a double-quoted one would eat.
           $notes = @'
-          Download the zip, unzip it and run **SteamFinish.exe**. Nothing to install — the .NET
-          runtime is bundled.
+          **Installer (recommended)** — run `SteamFinish-VERSION-setup.exe`. It asks where to
+          install and whether to add a Desktop shortcut, and it upgrades an existing copy in place.
+          No administrator rights are needed for a per-user install.
+
+          **Portable** — download the `.zip`, unzip it and run **SteamFinish.exe**.
+
+          Either way the .NET runtime is bundled, so there is nothing else to install.
 
           Settings, logs and your Telegram setup live in `%AppData%\SteamFinish` and are kept
           across updates.
@@ -98,7 +120,7 @@ jobs:
           Verify the download against the published `.sha256` if you like.
           '@
 
-          $notes.Replace('OWNER_REPO', '${{ github.repository }}') | Out-File notes.md -Encoding utf8
+          $notes.Replace('OWNER_REPO', '${{ github.repository }}').Replace('VERSION', '${{ steps.version.outputs.version }}') | Out-File notes.md -Encoding utf8
 
       - name: Create the release
         shell: pwsh

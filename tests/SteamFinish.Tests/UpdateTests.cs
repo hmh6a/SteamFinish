@@ -72,6 +72,44 @@ public class ReleasePayloadTests
     }
 
     [Fact]
+    public void TheZipIsVerifiedAgainstItsOwnChecksumNotTheInstallers()
+    {
+        // A real release carries an installer and a zip, each with a .sha256. Pairing them by
+        // order would check the zip against the installer's hash and reject a good download.
+        var both = """
+            {"tag_name":"v1.5.0","assets":[
+              {"name":"SteamFinish-1.5.0-setup.exe","size":150000000,
+               "browser_download_url":"https://example.invalid/SteamFinish-1.5.0-setup.exe"},
+              {"name":"SteamFinish-1.5.0-setup.exe.sha256","size":80,
+               "browser_download_url":"https://example.invalid/SteamFinish-1.5.0-setup.exe.sha256"},
+              {"name":"SteamFinish-1.5.0-win-x64.zip","size":155000000,
+               "browser_download_url":"https://example.invalid/SteamFinish-1.5.0-win-x64.zip"},
+              {"name":"SteamFinish-1.5.0-win-x64.zip.sha256","size":80,
+               "browser_download_url":"https://example.invalid/SteamFinish-1.5.0-win-x64.zip.sha256"}]}
+            """;
+
+        var release = ReleaseReader.Read(both)!;
+
+        Assert.EndsWith("SteamFinish-1.5.0-win-x64.zip", release.DownloadUrl, StringComparison.Ordinal);
+        Assert.EndsWith("SteamFinish-1.5.0-win-x64.zip.sha256", release.ChecksumUrl!, StringComparison.Ordinal);
+        Assert.DoesNotContain("setup", release.ChecksumUrl!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AZipWithNoMatchingChecksumIsLeftUnverifiedRatherThanMispaired()
+    {
+        var mismatched = """
+            {"tag_name":"v1.5.0","assets":[
+              {"name":"SteamFinish-1.5.0-setup.exe.sha256","size":80,
+               "browser_download_url":"https://example.invalid/setup.sha256"},
+              {"name":"SteamFinish-1.5.0-win-x64.zip","size":1,
+               "browser_download_url":"https://example.invalid/a.zip"}]}
+            """;
+
+        Assert.Null(ReleaseReader.Read(mismatched)!.ChecksumUrl);
+    }
+
+    [Fact]
     public void ADraftIsNotOffered()
     {
         var draft = Payload.Replace("\"draft\":false", "\"draft\":true", StringComparison.Ordinal);

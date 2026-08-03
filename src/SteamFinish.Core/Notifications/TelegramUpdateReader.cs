@@ -9,7 +9,7 @@ public sealed record DiscoveredChat(string ChatId, string Title, string Kind)
     public string Describe() => $"{Title} ({Kind})";
 }
 
-public sealed record TelegramUpdate(long UpdateId, DiscoveredChat? Chat);
+public sealed record TelegramUpdate(long UpdateId, DiscoveredChat? Chat, TelegramCallback? Callback = null);
 
 public sealed record TelegramUpdates(bool Ok, string Description, IReadOnlyList<TelegramUpdate> Updates)
 {
@@ -66,7 +66,7 @@ public static class TelegramUpdateReader
                     continue;
                 }
 
-                updates.Add(new TelegramUpdate(updateId, ReadChat(element)));
+                updates.Add(new TelegramUpdate(updateId, ReadChat(element), ReadCallback(element)));
             }
 
             return new TelegramUpdates(true, "ok", updates);
@@ -75,6 +75,55 @@ public static class TelegramUpdateReader
         {
             return TelegramUpdates.Failed("Telegram returned an unexpected response.");
         }
+    }
+
+    /// <summary>The value for <c>allowed_updates</c> while waiting for a button press.</summary>
+    public const string CallbackUpdatesJson = "[\"callback_query\"]";
+
+    /// <summary>Reads an inline-button press, if this update is one.</summary>
+    private static TelegramCallback? ReadCallback(JsonElement update)
+    {
+        if (!update.TryGetProperty("callback_query", out var query) || query.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var id = Text(query, "id");
+        var data = Text(query, "data");
+        if (id.Length == 0 || data.Length == 0)
+        {
+            return null;
+        }
+
+        long messageId = 0;
+        var chatId = string.Empty;
+        if (query.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.Object)
+        {
+            if (message.TryGetProperty("message_id", out var mid) && mid.TryGetInt64(out var parsed))
+            {
+                messageId = parsed;
+            }
+
+            if (message.TryGetProperty("chat", out var chat)
+                && chat.ValueKind == JsonValueKind.Object
+                && chat.TryGetProperty("id", out var cid)
+                && cid.TryGetInt64(out var chatNumber))
+            {
+                chatId = chatNumber.ToString();
+            }
+        }
+
+        var from = string.Empty;
+        if (query.TryGetProperty("from", out var sender) && sender.ValueKind == JsonValueKind.Object)
+        {
+            from = Text(sender, "first_name");
+            if (from.Length == 0)
+            {
+                from = Text(sender, "username");
+            }
+        }
+
+        return new TelegramCallback(id, chatId, messageId, data, from);
     }
 
     /// <summary>Reads the chat out of a <c>getChat</c> response.</summary>

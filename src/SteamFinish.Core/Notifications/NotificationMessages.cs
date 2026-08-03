@@ -206,6 +206,85 @@ public static class NotificationMessages
         return builder.ToString().TrimEnd();
     }
 
+    // ---------------------------------------------------------------- Remote buttons
+
+    public static string ButtonShutdownNow(MessageLanguage language, PowerAction action) =>
+        language == MessageLanguage.Arabic
+            ? $"⚡ {ArabicAction(action)} الآن"
+            : $"⚡ {action} now";
+
+    public static string ButtonSkip(MessageLanguage language) =>
+        language == MessageLanguage.Arabic ? "🛑 لا تطفئ" : "🛑 Don't";
+
+    /// <summary>Shown as a toast on the phone the moment a button is pressed.</summary>
+    public static string Toast(MessageLanguage language, RemoteDecision decision) =>
+        (language, decision) switch
+        {
+            (MessageLanguage.Arabic, RemoteDecision.Now) => "جارٍ التنفيذ الآن…",
+            (MessageLanguage.Arabic, _) => "تم الإلغاء",
+            (_, RemoteDecision.Now) => "Running it now…",
+            _ => "Cancelled",
+        };
+
+    /// <summary>Replaces the countdown message once someone presses a button.</summary>
+    public static string DecisionTaken(
+        MessageLanguage language,
+        RemoteDecision decision,
+        PowerAction action,
+        string who)
+    {
+        var by = string.IsNullOrWhiteSpace(who) ? string.Empty : $" · {Escape(who)}";
+        var builder = new StringBuilder();
+        builder.AppendLine(Header);
+        builder.AppendLine();
+
+        if (language == MessageLanguage.Arabic)
+        {
+            builder.AppendLine(decision == RemoteDecision.Now
+                ? $"⚡ <b>تم {ArabicAction(action)} الحاسبة الآن</b>{by}"
+                : $"🛑 <b>أُلغي {ArabicAction(action)}</b>{by}");
+            builder.AppendLine();
+            builder.AppendLine(decision == RemoteDecision.Now
+                ? "نُفِّذ الأمر فوراً بناءً على طلبك، دون انتظار العد التنازلي."
+                : "الحاسبة ستبقى تعمل. المراقبة مستمرة، وسيبدأ عد جديد عند انتهاء تنزيل جديد.");
+        }
+        else
+        {
+            builder.AppendLine(decision == RemoteDecision.Now
+                ? $"⚡ <b>{action} started now</b>{by}"
+                : $"🛑 <b>{action} cancelled</b>{by}");
+            builder.AppendLine();
+            builder.AppendLine(decision == RemoteDecision.Now
+                ? "Carried out straight away at your request, without waiting for the countdown."
+                : "The PC stays on. Monitoring continues, and a new countdown starts after the next download.");
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    /// <summary>Replaces the countdown message when the outcome was decided at the PC instead.</summary>
+    public static string DecidedAtThePc(MessageLanguage language, PowerAction action, bool executed)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine(Header);
+        builder.AppendLine();
+
+        if (language == MessageLanguage.Arabic)
+        {
+            builder.AppendLine(executed
+                ? $"⚡ <b>تم {ArabicAction(action)} الحاسبة</b>"
+                : $"🛑 <b>أُلغي {ArabicAction(action)} من البرنامج</b>");
+        }
+        else
+        {
+            builder.AppendLine(executed
+                ? $"⚡ <b>{action} started</b>"
+                : $"🛑 <b>{action} cancelled from the app</b>");
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
     public static string Test(MessageLanguage language)
     {
         var builder = new StringBuilder();

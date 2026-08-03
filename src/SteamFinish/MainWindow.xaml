@@ -450,6 +450,12 @@
                                              Text="{Binding TelegramProgressStep, UpdateSourceTrigger=LostFocus}" />
                                 </Grid>
 
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Margin="0,4,0,0"
+                                          Content="{m:Tr Telegram.RemoteButtons}"
+                                          IsChecked="{Binding TelegramRemoteButtons}" />
+                                <TextBlock Text="{m:Tr Telegram.RemoteButtonsHint}" Style="{StaticResource MutedText}"
+                                           Margin="28,-6,0,10" />
+
                                 <TextBlock Text="{m:Tr Telegram.MessageLanguage}" Style="{StaticResource MutedText}" Margin="0,4,0,6" />
                                 <UniformGrid Columns="2" Margin="0,0,-8,0">
                                     <RadioButton Style="{StaticResource ActionTile}" GroupName="TelegramLanguage"

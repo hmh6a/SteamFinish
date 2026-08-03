@@ -199,6 +199,12 @@ public sealed class Loc : INotifyPropertyChanged
         ["Telegram.OnFinish"] = ("Everything finishes, before the action runs", "انتهاء كل شيء، قبل تنفيذ الإجراء"),
         ["Telegram.OnCancel"] = ("The countdown is cancelled", "إلغاء العد التنازلي"),
         ["Telegram.OnProgress"] = ("Progress advances by this many percent", "تقدّم التنزيل بهذه النسبة المئوية"),
+        ["Telegram.RemoteButtons"] = (
+            "Add \"run it now\" and \"don't\" buttons to the finish message",
+            "أضف زرَّي \"نفّذ الآن\" و\"لا تطفئ\" إلى رسالة الانتهاء"),
+        ["Telegram.RemoteButtonsHint"] = (
+            "Lets you settle the countdown from your phone. Anyone who can use the bot can press them.",
+            "يتيح حسم العد التنازلي من الهاتف. أي شخص يستطيع استخدام البوت يستطيع الضغط عليهما."),
         ["Telegram.MessageLanguage"] = ("Message language", "لغة الرسائل"),
         ["Telegram.SendTest"] = ("Send test message", "إرسال رسالة تجريبية"),
         ["Telegram.NotIdentified"] = ("not identified yet", "لم يُتعرّف عليها بعد"),

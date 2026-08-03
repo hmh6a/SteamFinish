@@ -56,6 +56,9 @@ public sealed class MonitorHost : IDisposable
         Engine.ActionDue += OnActionDue;
         Engine.CountdownStarted += OnCountdownStarted;
         Engine.CountdownCancelled += OnCountdownCancelled;
+
+        // Button presses arrive on a background thread; everything else here is dispatcher-bound.
+        Telegram.RemoteDecisionMade += decision => _dispatcher.BeginInvoke(() => ApplyRemoteDecision(decision));
     }
 
     public MonitorEngine Engine { get; }
@@ -298,6 +301,25 @@ public sealed class MonitorHost : IDisposable
         Telegram.OnCountdownCancelled(_settings().Action, reason);
     }
 
+    /// <summary>Applies a decision taken from the Telegram buttons.</summary>
+    private void ApplyRemoteDecision(RemoteDecision decision)
+    {
+        if (decision == RemoteDecision.Now)
+        {
+            // Not a cancel: this jumps straight to the action, so nothing is announced as cancelled.
+            if (!Engine.RunNow())
+            {
+                _log.Warn("A remote 'run now' arrived after the countdown had already ended.");
+            }
+
+            return;
+        }
+
+        _log.Info("Countdown cancelled from Telegram.");
+        Engine.CancelCountdown();
+        _power.AbortPendingShutdown();
+    }
+
     private void OnActionDue()
     {
         var settings = _settings();
@@ -305,15 +327,20 @@ public sealed class MonitorHost : IDisposable
         _log.Info($"Countdown finished. Running {action}.");
         ActionStarting?.Invoke(action);
 
+        var executed = true;
         try
         {
             _power.Execute(action, settings.ForceCloseApps);
         }
         catch (PowerActionException e)
         {
+            executed = false;
             _log.Error("The power action could not be started.", e);
             ActionFailed?.Invoke(e.Message);
         }
+
+        // Leaves the chat showing the outcome and takes the buttons away.
+        Telegram.OnResolvedLocally(action, executed);
 
         // Sleep and hibernate return control once the PC wakes up again; leave monitoring off then.
         Engine.Disable();

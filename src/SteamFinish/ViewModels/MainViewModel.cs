@@ -683,6 +683,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    public bool TelegramRemoteButtons
+    {
+        get => _settings.Telegram.RemoteButtons;
+        set => SetSetting(_settings.Telegram.RemoteButtons == value, () => _settings.Telegram.RemoteButtons = value);
+    }
+
     public bool TelegramNotifyOnProgress
     {
         get => _settings.Telegram.NotifyOnProgress;

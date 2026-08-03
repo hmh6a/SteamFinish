@@ -23,7 +23,7 @@ public interface ITelegramSender
 /// Minimal Telegram Bot API client — just enough to check a token and post messages.
 /// The token is never written to the log.
 /// </summary>
-public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, IDisposable
+public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, ITelegramRemoteControl, IDisposable
 {
     private const string ApiRoot = "https://api.telegram.org";
 
@@ -37,6 +37,12 @@ public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, IDisp
 
     private readonly bool _ownsHandler;
     private readonly ILog _log;
+
+    /// <summary>
+    /// Telegram refuses concurrent getUpdates calls on one bot with a 409. Chat pairing and the
+    /// countdown buttons both poll, so the two take turns instead of colliding.
+    /// </summary>
+    private readonly SemaphoreSlim _pollGate = new(1, 1);
 
     /// <param name="handler">Substituted in tests; the real client creates its own.</param>
     public TelegramClient(ILog? log = null, HttpMessageHandler? handler = null)
@@ -290,13 +296,163 @@ public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, IDisp
         }
     }
 
+    /// <summary>
+    /// Posts the countdown message with its two buttons to every configured chat, and reports where
+    /// each copy landed so they can all be edited once the outcome is known.
+    /// </summary>
+    public async Task<IReadOnlyList<PromptTarget>> SendWithButtonsAsync(
+        TelegramOptions options,
+        string html,
+        string nowLabel,
+        string skipLabel,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        var markup = BuildKeyboard(nowLabel, skipLabel, token);
+        var targets = new List<PromptTarget>();
+
+        foreach (var chatId in options.ChatIds.Where(id => !string.IsNullOrWhiteSpace(id)))
+        {
+            var result = await PostMessageAsync(options.BotToken, chatId, html, cancellationToken, markup)
+                .ConfigureAwait(false);
+
+            if (result is { Success: true, MessageId: { } messageId })
+            {
+                targets.Add(new PromptTarget(chatId, messageId));
+            }
+        }
+
+        return targets;
+    }
+
+    /// <summary>
+    /// Waits for one of this countdown's buttons to be pressed. Presses that carry a different token
+    /// — a button left over from an earlier countdown — are acknowledged and ignored.
+    /// </summary>
+    public async Task<(TelegramCallback Callback, RemoteDecision Decision)?> WaitForDecisionAsync(
+        string botToken,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TelegramOptions.LooksLikeToken(botToken))
+        {
+            return null;
+        }
+
+        long? offset = null;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var poll = await GetUpdatesAsync(
+                botToken,
+                offset,
+                (int)PollHold.TotalSeconds,
+                cancellationToken,
+                TelegramUpdateReader.CallbackUpdatesJson).ConfigureAwait(false);
+
+            if (!poll.Ok)
+            {
+                _log.Warn($"Cannot listen for button presses: {poll.Description}");
+                return null;
+            }
+
+            foreach (var update in poll.Updates)
+            {
+                offset = update.UpdateId + 1;
+                if (update.Callback is not { } callback)
+                {
+                    continue;
+                }
+
+                if (RemoteControl.Parse(callback.Data, token) is { } decision)
+                {
+                    return (callback, decision);
+                }
+
+                // A stale button: clear its spinner so the chat does not look stuck.
+                await AnswerCallbackAsync(botToken, callback.Id, string.Empty, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Clears the button's loading spinner and optionally shows a toast in Telegram.</summary>
+    public async Task AnswerCallbackAsync(
+        string botToken,
+        string callbackId,
+        string text,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var fields = new Dictionary<string, string>
+            {
+                ["callback_query_id"] = callbackId,
+            };
+
+            if (text.Length > 0)
+            {
+                fields["text"] = text;
+            }
+
+            using var content = new FormUrlEncodedContent(fields);
+            using var response = await _http
+                .PostAsync($"{ApiRoot}/bot{botToken}/answerCallbackQuery", content, cancellationToken)
+                .ConfigureAwait(false);
+            _ = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or OperationCanceledException)
+        {
+            // Cosmetic only.
+        }
+    }
+
+    /// <summary>
+    /// Rewrites every copy of the countdown message, dropping the buttons so they cannot be pressed
+    /// a second time.
+    /// </summary>
+    public async Task EditAllAsync(
+        string botToken,
+        IReadOnlyList<PromptTarget> targets,
+        string html,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var target in targets)
+        {
+            var edited = await EditMessageAsync(botToken, target.ChatId, target.MessageId, html, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!edited.Success)
+            {
+                _log.Warn($"Could not update the countdown message in {target.ChatId}: {edited.Message}");
+            }
+        }
+    }
+
+    private static string BuildKeyboard(string nowLabel, string skipLabel, string token) =>
+        JsonSerializer.Serialize(new
+        {
+            inline_keyboard = new[]
+            {
+                new[]
+                {
+                    new { text = nowLabel, callback_data = RemoteControl.DataFor(RemoteDecision.Now, token) },
+                    new { text = skipLabel, callback_data = RemoteControl.DataFor(RemoteDecision.Skip, token) },
+                },
+            },
+        });
+
     private async Task<TelegramUpdates> GetUpdatesAsync(
         string token,
         long? offset,
         int holdSeconds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? allowedUpdates = null)
     {
-        var query = $"timeout={holdSeconds}&allowed_updates={Uri.EscapeDataString(TelegramUpdateReader.AllowedUpdatesJson)}";
+        var allowed = allowedUpdates ?? TelegramUpdateReader.AllowedUpdatesJson;
+        var query = $"timeout={holdSeconds}&allowed_updates={Uri.EscapeDataString(allowed)}";
         if (offset is { } value)
         {
             query += $"&offset={value}";
@@ -304,12 +460,20 @@ public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, IDisp
 
         try
         {
-            var client = holdSeconds > 0 ? _pollHttp : _http;
-            using var response = await client
-                .GetAsync($"{ApiRoot}/bot{token}/getUpdates?{query}", cancellationToken)
-                .ConfigureAwait(false);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            return TelegramUpdateReader.Read(body);
+            await _pollGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var client = holdSeconds > 0 ? _pollHttp : _http;
+                using var response = await client
+                    .GetAsync($"{ApiRoot}/bot{token}/getUpdates?{query}", cancellationToken)
+                    .ConfigureAwait(false);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return TelegramUpdateReader.Read(body);
+            }
+            finally
+            {
+                _pollGate.Release();
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -349,17 +513,25 @@ public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, IDisp
         string token,
         string chatId,
         string html,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? replyMarkup = null)
     {
         try
         {
-            using var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            var fields = new Dictionary<string, string>
             {
                 ["chat_id"] = chatId,
                 ["text"] = html,
                 ["parse_mode"] = "HTML",
                 ["disable_web_page_preview"] = "true",
-            });
+            };
+
+            if (replyMarkup is not null)
+            {
+                fields["reply_markup"] = replyMarkup;
+            }
+
+            using var content = new FormUrlEncodedContent(fields);
 
             using var response = await _http
                 .PostAsync($"{ApiRoot}/bot{token}/sendMessage", content, cancellationToken)
@@ -420,6 +592,8 @@ public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, IDisp
 
     public void Dispose()
     {
+        _pollGate.Dispose();
+
         // A handler supplied from outside is the caller's to dispose.
         if (_ownsHandler)
         {

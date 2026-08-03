@@ -37,6 +37,12 @@ public sealed class TelegramOptions
 
     public bool NotifyOnCancel { get; set; } = true;
 
+    /// <summary>
+    /// Put "run it now" and "don't" buttons on the finish message, so the countdown can be settled
+    /// from the phone instead of walking to the PC.
+    /// </summary>
+    public bool RemoteButtons { get; set; } = true;
+
     public MessageLanguage Language { get; set; } = MessageLanguage.Arabic;
 
     /// <summary>True when there is enough configuration to attempt a send.</summary>
@@ -63,6 +69,7 @@ public sealed class TelegramOptions
         ProgressStepPercent = ProgressStepPercent,
         NotifyOnFinish = NotifyOnFinish,
         NotifyOnCancel = NotifyOnCancel,
+        RemoteButtons = RemoteButtons,
         Language = Language,
     };
 

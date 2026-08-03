@@ -97,6 +97,23 @@ public sealed class MonitorEngine(Func<MonitorOptions> optionsProvider)
         return true;
     }
 
+    /// <summary>
+    /// Skips the rest of the countdown and fires the action immediately. Used by the "run it now"
+    /// button on the Telegram message; deliberately not a cancel, so no cancellation is announced.
+    /// </summary>
+    public bool RunNow()
+    {
+        if (Phase != MonitorPhase.Countdown)
+        {
+            return false;
+        }
+
+        _countdownEndsAt = null;
+        SetPhase(MonitorPhase.Executing);
+        ActionDue?.Invoke();
+        return true;
+    }
+
     /// <summary>Feeds a snapshot in and advances the state machine. Safe to call every second.</summary>
     public MonitorPhase Update(DownloadSnapshot snapshot, DateTimeOffset now)
     {

@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without the leading v (e.g. 1.2.0)'
+        required: true
+
+permissions:
+  # Needed to create the release and upload the build to it.
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Work out the version
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            '${{ github.event.inputs.version }}'
+          } else {
+            '${{ github.ref_name }}' -replace '^v', ''
+          }
+
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+            throw "'$version' is not a version number like 1.2.0."
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Releasing $version"
+
+      - name: Build and test
+        run: |
+          dotnet restore
+          dotnet build --configuration Release --no-restore
+          dotnet test --configuration Release --no-build
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          # Self-contained and single-file: one .exe that runs without installing a .NET runtime.
+          dotnet publish src/SteamFinish `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=none `
+            -p:Version=${{ steps.version.outputs.version }} `
+            --output publish
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $zip = "artifacts/SteamFinish-${{ steps.version.outputs.version }}-win-x64.zip"
+
+          Compress-Archive -Path publish/SteamFinish.exe -DestinationPath $zip -Force
+
+          # Published next to the zip so a download can be checked before it is run.
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          "$hash  $(Split-Path -Leaf $zip)" | Out-File "$zip.sha256" -Encoding ascii
+
+          Write-Host "SHA256 $hash"
+          Get-ChildItem artifacts | Format-Table Name, Length
+
+      - name: Write the release notes
+        shell: pwsh
+        run: |
+          # A literal here-string: the notes contain backticks, which a double-quoted one would eat.
+          $notes = @'
+          Download the zip, unzip it and run **SteamFinish.exe**. Nothing to install — the .NET
+          runtime is bundled.
+
+          Settings, logs and your Telegram setup live in `%AppData%\SteamFinish` and are kept
+          across updates.
+
+          **Updating a copy on your Desktop**
+
+          ```powershell
+          iwr -useb https://raw.githubusercontent.com/OWNER_REPO/main/tools/Update-SteamFinish.ps1 | iex
+          ```
+
+          Verify the download against the published `.sha256` if you like.
+          '@
+
+          $notes.Replace('OWNER_REPO', '${{ github.repository }}') | Out-File notes.md -Encoding utf8
+
+      - name: Create the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # gh exits non-zero when the release is absent, which is information, not a failure.
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          $tag = '${{ steps.version.outputs.tag }}'
+          gh release view $tag *> $null
+          $exists = $LASTEXITCODE -eq 0
+
+          if ($exists) {
+            # Re-running the workflow for a tag refreshes its assets rather than failing.
+            gh release upload $tag artifacts/* --clobber
+          } else {
+            gh release create $tag artifacts/* --title "SteamFinish $tag" --notes-file notes.md
+          }
+
+          if ($LASTEXITCODE -ne 0) { throw "gh failed with exit code $LASTEXITCODE." }

@@ -80,7 +80,7 @@ public partial class App : Application
         var power = new WindowsPowerController(_log);
 
         _telegramClient = new TelegramClient(_log);
-        var telegram = new TelegramNotifier(() => _settings!.Telegram, _telegramClient, _log);
+        var telegram = new TelegramNotifier(() => _settings!.Telegram, _telegramClient, _log, _telegramClient);
 
         _host = new MonitorHost(scanner, engine, power, telegram, () => _settings!, _log);
         _viewModel = new MainViewModel(store, _settings, _host, librarySource, _telegramClient, _log);

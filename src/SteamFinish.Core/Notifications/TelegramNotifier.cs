@@ -10,10 +10,18 @@ namespace SteamFinish.Core.Notifications;
 /// state is always kept up to date — even while Telegram is switched off — so turning it on halfway
 /// through a download does not produce a burst of catch-up messages.
 /// </summary>
-public sealed class TelegramNotifier(Func<TelegramOptions> options, ITelegramSender client, ILog? log = null)
+public sealed class TelegramNotifier(
+    Func<TelegramOptions> options,
+    ITelegramSender client,
+    ILog? log = null,
+    ITelegramRemoteControl? remote = null)
 {
     private readonly ILog _log = log ?? NullLog.Instance;
     private readonly Dictionary<uint, int> _lastStep = [];
+
+    private CancellationTokenSource? _prompt;
+    private IReadOnlyList<PromptTarget> _promptTargets = [];
+    private bool _suppressCancelMessage;
 
     /// <summary>App ids seen in the previous snapshot; <c>null</c> until the first one arrives.</summary>
     private HashSet<uint>? _known;
@@ -114,26 +122,146 @@ public sealed class TelegramNotifier(Func<TelegramOptions> options, ITelegramSen
         }
     }
 
+    /// <summary>Raised on a background thread when a countdown button is pressed on the phone.</summary>
+    public event Action<RemoteDecision>? RemoteDecisionMade;
+
     public void OnCountdownStarted(DownloadSummary? summary, PowerAction action, int countdownSeconds)
     {
-        var settings = options();
+        var settings = options().Clone();
         if (!settings.NotifyOnFinish)
         {
             return;
         }
 
-        Send(summary is null
+        var html = summary is null
             ? NotificationMessages.FinishedWithoutDetails(settings.Language, action, countdownSeconds)
-            : NotificationMessages.Finished(settings.Language, summary, action, countdownSeconds));
+            : NotificationMessages.Finished(settings.Language, summary, action, countdownSeconds);
+
+        if (remote is null || !settings.RemoteButtons || !settings.IsUsable)
+        {
+            Send(html);
+            return;
+        }
+
+        _ = RunPromptAsync(settings, html, action);
     }
 
     public void OnCountdownCancelled(PowerAction action, CountdownCancelReason reason)
     {
+        StopPrompt();
+
+        if (_suppressCancelMessage)
+        {
+            // The button press already rewrote the message; a second one would just be noise.
+            _suppressCancelMessage = false;
+            return;
+        }
+
         var settings = options();
         if (settings.NotifyOnCancel)
         {
             Send(NotificationMessages.Cancelled(settings.Language, action, reason));
         }
+    }
+
+    /// <summary>
+    /// Called once the countdown is settled at the PC rather than from the phone, so the buttons are
+    /// removed and the chat is left showing what actually happened.
+    /// </summary>
+    public void OnResolvedLocally(PowerAction action, bool executed)
+    {
+        StopPrompt();
+
+        var targets = _promptTargets;
+        _promptTargets = [];
+        if (targets.Count == 0 || remote is null)
+        {
+            return;
+        }
+
+        var settings = options().Clone();
+        _ = remote.EditAllAsync(
+            settings.BotToken,
+            targets,
+            NotificationMessages.DecidedAtThePc(settings.Language, action, executed));
+    }
+
+    /// <summary>
+    /// Posts the countdown message with its buttons and waits for a press. The wait ends by itself
+    /// when the countdown is settled at the PC, which cancels the token.
+    /// </summary>
+    private async Task RunPromptAsync(TelegramOptions settings, string html, PowerAction action)
+    {
+        StopPrompt();
+        var cancellation = new CancellationTokenSource();
+        _prompt = cancellation;
+        var token = RemoteControl.NewToken();
+
+        try
+        {
+            var targets = await remote!
+                .SendWithButtonsAsync(
+                    settings,
+                    html,
+                    NotificationMessages.ButtonShutdownNow(settings.Language, action),
+                    NotificationMessages.ButtonSkip(settings.Language),
+                    token,
+                    cancellation.Token)
+                .ConfigureAwait(false);
+
+            if (targets.Count == 0)
+            {
+                _log.Warn("The countdown message could not be delivered, so no buttons are live.");
+                return;
+            }
+
+            _promptTargets = targets;
+
+            var pressed = await remote
+                .WaitForDecisionAsync(settings.BotToken, token, cancellation.Token)
+                .ConfigureAwait(false);
+
+            if (pressed is not { } outcome)
+            {
+                return;
+            }
+
+            _log.Info($"Telegram button pressed: {outcome.Decision}.");
+
+            await remote.AnswerCallbackAsync(
+                settings.BotToken,
+                outcome.Callback.Id,
+                NotificationMessages.Toast(settings.Language, outcome.Decision)).ConfigureAwait(false);
+
+            await remote.EditAllAsync(
+                settings.BotToken,
+                targets,
+                NotificationMessages.DecisionTaken(
+                    settings.Language,
+                    outcome.Decision,
+                    action,
+                    outcome.Callback.From)).ConfigureAwait(false);
+
+            _promptTargets = [];
+            _suppressCancelMessage = outcome.Decision == RemoteDecision.Skip;
+            RemoteDecisionMade?.Invoke(outcome.Decision);
+        }
+        catch (OperationCanceledException)
+        {
+            // Settled at the PC while we were waiting.
+        }
+        catch (Exception e)
+        {
+            _log.Error("The Telegram countdown prompt failed.", e);
+        }
+    }
+
+    private void StopPrompt()
+    {
+        var prompt = _prompt;
+        _prompt = null;
+        prompt?.Cancel();
+        prompt?.Dispose();
     }
 
     /// <summary>Verifies the token and posts a test message to every configured chat.</summary>

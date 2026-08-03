@@ -200,8 +200,25 @@ Progress and start messages describe the *download*, not the shutdown, so they a
 Telegram is configured for them — monitoring does not have to be armed. Turning them off in settings
 stops both the messages and the background scanning they need.
 
-The finish message is the one that matters — it arrives *before* the countdown ends, so you can
-cancel from your phone:
+### Deciding from your phone
+
+The finish message carries two buttons, so the countdown can be settled without walking to the PC:
+
+| Button | What happens |
+| --- | --- |
+| **⚡ Shutdown now** | Skips the rest of the countdown and runs the action immediately |
+| **🛑 Don't** | Cancels it; the PC stays on and monitoring continues |
+
+Either way the message itself is **rewritten** to say what was decided and who decided it, and the
+buttons are removed so they cannot be pressed twice. If the countdown is instead settled at the PC,
+the same message is rewritten to say that.
+
+Every countdown mints a fresh random token embedded in both buttons. A button from an earlier
+countdown — still sitting in the chat history — is rejected, so an old message can never power the
+PC off. Note that anyone who can use the bot can press them; turn the buttons off under
+**Settings → Telegram** if the bot lives in a shared group.
+
+The finish message arrives *before* the countdown ends, so there is time to react:
 
 ```
 🎮 SteamFinish
@@ -280,6 +297,51 @@ Regenerate the icon after editing the artwork in `tools/Make-Icon.ps1`:
 ```powershell
 .\tools\Make-Icon.ps1
 ```
+
+## Releases and updating
+
+Two workflows live in [.github/workflows](.github/workflows):
+
+| Workflow | Runs on | What it does |
+| --- | --- | --- |
+| `ci.yml` | every push and PR to `main` | restore, build, run the full test suite |
+| `release.yml` | a `v*` tag, or manually | builds, tests, publishes and attaches a release |
+
+Cutting a release:
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow publishes a **self-contained single-file** `SteamFinish.exe` (~148 MB — the .NET
+runtime is bundled, so there is nothing to install), zips it with a `.sha256` beside it, and creates
+the GitHub release. Re-running it for the same tag replaces the assets instead of failing. You can
+also trigger it by hand from the Actions tab and type the version in.
+
+### Updating the copy on your Desktop
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/OWNER/REPO/main/tools/Update-SteamFinish.ps1 | iex
+```
+
+Or, from a checkout:
+
+```powershell
+.\tools\Update-SteamFinish.ps1 -Repo OWNER/REPO
+```
+
+It fetches the newest release, checks it against the published SHA256, closes a running SteamFinish,
+replaces `Desktop\SteamFinish`, and starts the new build. The repository is remembered after the
+first run, so afterwards the bare command is enough. It exits early when you are already on the
+latest version.
+
+**Your settings are safe**: everything lives in `%AppData%\SteamFinish`, which the updater never
+touches — bot token, chat list, theme, language and all.
+
+The only destructive step refuses to run unless the target folder actually contains
+`SteamFinish.exe`, so pointing it at the Desktop itself, or at any folder that is not one of its own
+installs, is an error rather than a deletion.
 
 ## Settings
 
@@ -377,6 +439,13 @@ monitoring, Telegram notifications, event logging and the dark theme are done.)
   الإجراء إلا بعد انتهاء تنزيلات كل منصّة مفعّلة. وكل تنزيل يحمل **تاك** يبيّن مصدره (Steam أو Xbox).
 - تُقرأ نسبة تنزيلات Xbox من سجلّ Gaming Services نفسه — نفس الأرقام التي يعرضها تطبيق Xbox — ويُقرأ
   اسم اللعبة من ملف `MicrosoftGame.config` الخاص بها.
+- **بناء ونشر تلقائي عبر GitHub Actions**: عند دفع وسم `v1.0.0` يُبنى البرنامج ويُختبر ويُنشَر
+  إصدار فيه ملف `.exe` واحد مكتفٍ ذاتياً (لا يحتاج تثبيت .NET)، مع بصمة SHA256.
+- **أمر تحديث واحد** يستبدل النسخة على سطح المكتب بآخر إصدار، ويتحقق من البصمة، ولا يمسّ إعداداتك
+  في `%AppData%\SteamFinish`. ولا يحذف أي مجلد إلا إذا تأكّد أنه يحتوي `SteamFinish.exe`.
+- **زرّان في رسالة الانتهاء على تيليجرام**: «⚡ أطفئ الآن» ينفّذ فوراً دون انتظار العد التنازلي،
+  و«🛑 لا تطفئ» يلغيه وتبقى الحاسبة تعمل. وتُعدَّل الرسالة نفسها لتبيّن ما حدث ومَن قرّره، وتُزال
+  الأزرار كي لا تُضغط مرتين. ولكل عدّ تنازلي رمز خاص، فزر من عدٍّ قديم لا يعمل.
 - يرسل إشعارات تلكرام: عند بدء التحميل، وكل ٥٪ تقدّم، ورسالة مرتبة قبل الإطفاء تذكر الألعاب
   وأحجامها والمدة والسرعة — مع زر لتجربة الإرسال والتأكد من التوكن والجات آيدي.
 - انقطاع الإنترنت أو إيقاف التنزيل مؤقتاً **لا يعتبر** انتهاء تحميل.

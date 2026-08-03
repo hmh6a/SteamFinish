@@ -36,3 +36,6 @@ packages/
 *.tmp
 Thumbs.db
 desktop.ini
+
+## Personal notes, kept out of the published repository
+README.local.md

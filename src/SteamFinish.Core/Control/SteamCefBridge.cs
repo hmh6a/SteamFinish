@@ -34,28 +34,68 @@ public sealed class SteamCefBridge : IDisposable
     /// <summary>Steam looks for this in its install folder; the contents are never read.</summary>
     public const string MarkerFileName = ".cef-enable-remote-debugging";
 
-    /// <summary>
-    /// Steam's Chromium always listens here. The port is not configurable in Steam, which is why a
-    /// clash with another local server has to be reported rather than worked around.
-    /// </summary>
-    public const int DebugPort = 8080;
+    /// <summary>Where Steam's Chromium listens unless it was told otherwise.</summary>
+    public const int DefaultDebugPort = 8080;
 
     /// <summary>The offscreen window that runs Steam's own logic, and the only one that has SteamClient.</summary>
     private const string SharedContext = "SharedJSContext";
 
     private readonly ILog _log;
-    private readonly string _debugRoot;
+    private readonly int[]? _fixedPorts;
 
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
 
-    /// <param name="port">
-    /// Only ever anything but <see cref="DebugPort"/> in tests, which stand a scripted DevTools
+    /// <summary>
+    /// The port the shared context was last reached on. Kept so the usual case is one request, not a
+    /// sweep, and so the UI can show which port ended up being used.
+    /// </summary>
+    public int? LastGoodPort { get; private set; }
+
+    /// <param name="ports">
+    /// Restricts the search to these ports. Used by the tests, which stand a scripted DevTools
     /// endpoint up on a free port rather than fighting whatever holds 8080 on the machine.
     /// </param>
-    public SteamCefBridge(ILog? log = null, int port = DebugPort)
+    public SteamCefBridge(ILog? log = null, params int[]? ports)
     {
         _log = log ?? NullLog.Instance;
-        _debugRoot = $"http://127.0.0.1:{port}";
+        _fixedPorts = ports is { Length: > 0 } ? ports : null;
+    }
+
+    /// <summary>
+    /// The ports worth trying, best first: the one that worked last time, then Steam's default, then
+    /// every other port a running steam.exe is holding — which is how a client started with
+    /// <c>-devtools-port</c> is found without anyone having to say so.
+    /// </summary>
+    private IEnumerable<int> Candidates()
+    {
+        if (_fixedPorts is { } fixedPorts)
+        {
+            return fixedPorts;
+        }
+
+        var ordered = new List<int>();
+
+        void Add(int port)
+        {
+            if (port > 0 && !ordered.Contains(port))
+            {
+                ordered.Add(port);
+            }
+        }
+
+        if (LastGoodPort is { } remembered)
+        {
+            Add(remembered);
+        }
+
+        Add(DefaultDebugPort);
+
+        foreach (var port in SteamPorts.ListeningPorts())
+        {
+            Add(port);
+        }
+
+        return ordered;
     }
 
     /// <summary>Where the marker file belongs, or <c>null</c> when Steam cannot be found.</summary>
@@ -179,18 +219,66 @@ public sealed class SteamCefBridge : IDisposable
     }
 
     /// <summary>
-    /// Asks Steam's DevTools endpoint for its pages and returns the shared context's socket URL in
-    /// <see cref="BridgeReply.Value"/>. Whatever else may be listening on the port is reported as
-    /// such, because "another program holds 8080" and "Steam is not listening" need different fixes
-    /// and look identical from a failed request.
+    /// Tries each candidate port until one of them turns out to be Steam, and returns the shared
+    /// context's socket URL in <see cref="BridgeReply.Value"/>.
+    ///
+    /// The failure is reported from whichever port got furthest, because "another program holds
+    /// 8080" and "Steam is not listening at all" need different fixes and look identical from a
+    /// request that simply did not answer.
     /// </summary>
     private async Task<BridgeReply> FindSharedContextAsync(CancellationToken cancellationToken)
+    {
+        var ports = Candidates().ToList();
+        BridgeReply? best = null;
+
+        foreach (var port in ports)
+        {
+            var attempt = await ProbePortAsync(port, cancellationToken).ConfigureAwait(false);
+
+            if (attempt.Outcome == ControlOutcome.Done)
+            {
+                if (LastGoodPort != port)
+                {
+                    _log.Info($"Steam's control channel answered on port {port}.");
+                    LastGoodPort = port;
+                }
+
+                return attempt;
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return attempt;
+            }
+
+            // A port that answered with something — even the wrong something — says more than one
+            // that did not answer at all.
+            best = Rank(attempt) > Rank(best) ? attempt : best;
+        }
+
+        // Nothing worked, so whatever was remembered is stale.
+        LastGoodPort = null;
+
+        return best ?? new BridgeReply(
+            IsSteamRunning() ? ControlOutcome.RestartSteam : ControlOutcome.SteamNotRunning,
+            Detail: "Nothing is listening.");
+
+        static int Rank(BridgeReply? reply) => reply?.Outcome switch
+        {
+            ControlOutcome.Refused => 3,
+            ControlOutcome.PortBusy => 2,
+            ControlOutcome.RestartSteam => 1,
+            _ => 0,
+        };
+    }
+
+    private async Task<BridgeReply> ProbePortAsync(int port, CancellationToken cancellationToken)
     {
         string body;
         try
         {
             using var response = await _http
-                .GetAsync($"{_debugRoot}/json/list", cancellationToken)
+                .GetAsync($"http://127.0.0.1:{port}/json/list", cancellationToken)
                 .ConfigureAwait(false);
             body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -200,8 +288,8 @@ public sealed class SteamCefBridge : IDisposable
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
-            // Nothing answered. Either Steam is closed, or it is open but was started before the
-            // marker file existed — the user cannot tell those apart, so we do it for them.
+            // Nothing answered here. Either Steam is closed, or it is open but was started before
+            // the marker file existed — the user cannot tell those apart, so we do it for them.
             return new BridgeReply(
                 IsSteamRunning() ? ControlOutcome.RestartSteam : ControlOutcome.SteamNotRunning,
                 Detail: e.Message);
@@ -228,7 +316,7 @@ public sealed class SteamCefBridge : IDisposable
         }
         catch (JsonException)
         {
-            // Something is listening on 8080 and it is not a DevTools endpoint at all.
+            // Something is listening here and it is not a DevTools endpoint at all.
             return new BridgeReply(ControlOutcome.PortBusy, Detail: "The port is held by another program.");
         }
     }

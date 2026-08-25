@@ -90,6 +90,11 @@ Every reply carries **⏸ Pause** and **▶️ Resume** buttons, and so does the
 download — so after the first message it is one tap. Only the chats you paired are obeyed: holding
 the bot token is not enough to stop someone's download.
 
+Commands reach the PC that is reading them. If more than one machine reports into the same chat —
+each needs its own bot — put the name after the command to reach just one: `/pause laptop`. Every
+message is headed with the machine's name, taken from Windows and editable in **Settings →
+Telegram → Name of this PC**.
+
 **This needs one bit of setup, and it is worth knowing why.** Steam has no command line, registry
 key or `steam://` URL that pauses a download. What it does have is a Chromium-based client whose
 Downloads page drives the downloader through a privileged `SteamClient` object, and Chromium can be
@@ -100,12 +105,25 @@ asked to expose that object locally. So SteamFinish says exactly what Steam's ow
    administrator rights.
 2. **Restart Steam once.** The marker is only read at start-up.
 
-The button then reports whether the channel is actually open. Two things can stop it:
+The button then reports whether the channel is open, and on which port.
 
-- **Port 8080 is taken.** Steam's control channel always uses that port and the port is not
-  configurable. Docker Desktop, WSL and a lot of dev servers like 8080 too — if one of them holds
-  it, Steam cannot open the channel, and SteamFinish says so rather than failing quietly.
-- **Steam is closed.** Nothing to talk to.
+### About that port
+
+Steam's control channel defaults to port 8080, and 8080 is popular — Docker, WSL and half the dev
+servers ever written want it. Steam picks its port when it starts and never revisits it, so a client
+that came up while something else held 8080 has no channel at all.
+
+Neither half of that is left to the user to work out:
+
+- **Finding it.** The port is discovered, not assumed. SteamFinish asks Windows which ports the
+  running `steam.exe` is listening on and tries those, so a Steam started with `-devtools-port`
+  is found without being told. The port that worked is remembered and tried first next time.
+- **Freeing it.** When nothing can be reached, **Restart Steam on a free port** closes Steam with
+  its own `-shutdown` and starts it again with the channel on a port nothing is using. Downloads
+  carry on from where they stopped. It never happens on its own — only when that button is pressed.
+
+To make it permanent, add `-devtools-port 8123` (any free port) to your own Steam shortcut;
+SteamFinish will find it.
 
 **Steam only.** The Xbox app exposes no way to control a download at all, so `/pause` covers Steam
 and says as much.
@@ -160,6 +178,10 @@ route is through the client's own JavaScript — which is why that feature asks 
 a restart instead of just working. The alternatives were worse: suspending `steam.exe` freezes the
 whole client, and blocking it in the firewall knocks the client offline rather than pausing it.
 
+The port that channel uses is discovered rather than configured. Asking Windows for the listening
+sockets owned by `steam.exe` and probing those beats asking the user which port to use, because the
+user does not know either — Steam chose it at start-up.
+
 Telegram allows one long-poll listener per bot, and whichever poller confirms an update throws it
 away for the others. So the command loop is the only thing polling in normal operation, and the two
 flows that need the connection to themselves — pairing a chat, and the countdown buttons — take it
@@ -208,9 +230,23 @@ SteamFinish للمُنزِّل ما يقوله زر الإيقاف داخل Stea
 1. **الإعدادات ← تيليجرام ← تفعيل التحكم بالتنزيل** — ينشئ الملف، ولا يحتاج صلاحيات مدير.
 2. **أعد تشغيل Steam مرة واحدة** — لا يُقرأ الملف إلا عند بدء التشغيل.
 
-بعدها يخبرك الزر إن كانت القناة مفتوحة فعلاً. ما قد يمنعها أمران: أن يكون **المنفذ 8080** مشغولاً
-ببرنامج آخر (Docker وWSL يستخدمانه كثيراً) وهو المنفذ الوحيد الذي يستخدمه Steam، أو أن يكون Steam
-مغلقاً. **يعمل مع Steam فقط** — تطبيق Xbox لا يوفّر أي وسيلة تحكم بالتنزيل.
+بعدها يخبرك الزر إن كانت القناة مفتوحة فعلاً، وعلى أي منفذ.
+
+**بخصوص المنفذ**: يستخدم Steam المنفذ 8080 افتراضياً، وهو منفذ مزدحم (Docker وWSL وأغلب خوادم
+التطوير تريده). ويختار Steam منفذه عند بدء التشغيل ولا يعيد النظر فيه، فإن كان مشغولاً وقتها تبقى
+القناة مغلقة. والبرنامج يعالج الأمرين:
+
+- **العثور عليه**: لا يفترض البرنامج المنفذ بل يكتشفه — يسأل ويندوز عن المنافذ التي يستمع عليها
+  `steam.exe` ويجرّبها، فيجد Steam المشغّل بـ `-devtools-port` بلا أن يخبره أحد، ويتذكّر المنفذ الناجح.
+- **تفريغه**: عند تعذّر الوصول، يغلق زر **أعد تشغيل Steam على منفذ فارغ** برنامج Steam بأمره الخاص
+  ويعيد تشغيله على منفذ لا يستخدمه أحد. التنزيل يكمل من حيث توقف، ولا يحدث هذا تلقائياً أبداً.
+
+ولجعله دائمياً، أضف `-devtools-port 8123` إلى اختصار Steam عندك، وسيجده البرنامج وحده.
+
+**يعمل مع Steam فقط** — تطبيق Xbox لا يوفّر أي وسيلة تحكم بالتنزيل.
+
+**اسم الحاسبة** يظهر أعلى كل رسالة، ويُؤخذ من ويندوز ويمكن تعديله من الإعدادات. وإذا كانت أكثر من
+حاسبة تراسل المحادثة نفسها (لكل واحدة بوت خاص)، أضف الاسم بعد الأمر لتخصّها: `/pause laptop`.
 
 والتنزيل الموقوف مؤقتاً لا يُعدّ منتهياً، فالإيقاف من الهاتف لن يؤدي إلى إطفاء الحاسبة.
 

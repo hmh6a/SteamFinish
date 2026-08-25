@@ -38,18 +38,41 @@ public sealed class SteamDownloadController : IDownloadController, IDisposable
     /// <summary>Only one command at a time: two overlapping flips of the same switch settle at random.</summary>
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    /// <param name="port">Only moved off Steam's fixed port by the tests.</param>
+    private readonly SteamRelauncher _relauncher;
+
+    /// <param name="ports">Pins the search to these ports; only the tests do that.</param>
     public SteamDownloadController(
         ILog? log = null,
         Func<string?>? steamPath = null,
-        int port = SteamCefBridge.DebugPort)
+        params int[]? ports)
     {
         _log = log ?? NullLog.Instance;
-        _bridge = new SteamCefBridge(_log, port);
+        _bridge = new SteamCefBridge(_log, ports);
+        _relauncher = new SteamRelauncher(_log);
         _steamPath = steamPath ?? SteamLocator.FindSteamPath;
     }
 
     public bool BridgeMarkerPresent => SteamCefBridge.MarkerExists(_steamPath());
+
+    public int? ActivePort => _bridge.LastGoodPort;
+
+    /// <summary>
+    /// Restarts Steam on a free port. The marker file is written first, so a single press of the
+    /// button in Settings is enough even when nothing has been set up yet.
+    /// </summary>
+    public async Task<RelaunchResult> RestartSteamAsync(CancellationToken cancellationToken = default)
+    {
+        var steamPath = _steamPath();
+        EnableBridge();
+
+        var result = await _relauncher.RestartWithControlAsync(steamPath, cancellationToken).ConfigureAwait(false);
+        if (!result.Success)
+        {
+            _log.Warn($"Could not restart Steam with download control: {result.Outcome} {result.Detail}");
+        }
+
+        return result;
+    }
 
     public BridgeSetupResult EnableBridge()
     {

@@ -41,6 +41,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly RelayCommand _removeChatIdCommand;
     private readonly RelayCommand _testTelegramCommand;
     private readonly RelayCommand _enableDownloadControlCommand;
+    private readonly RelayCommand _restartSteamCommand;
 
     private string _statusHeadline = "Steam has not been checked yet";
     private string _statusDetail = "Enable monitoring to start watching downloads.";
@@ -131,6 +132,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _removeChatIdCommand = new RelayCommand(RemoveChatId, () => _selectedChatId is not null);
         _testTelegramCommand = new RelayCommand(TestTelegram, () => !_telegramBusy);
         _enableDownloadControlCommand = new RelayCommand(EnableDownloadControl, () => !_telegramBusy);
+        _restartSteamCommand = new RelayCommand(RestartSteam, () => !_telegramBusy);
         _checkUpdateCommand = new RelayCommand(() => _ = CheckUpdatesAsync(announceUpToDate: true), () => !_updateBusy);
         _installUpdateCommand = new RelayCommand(InstallUpdate, () => !_updateBusy && _pendingUpdate is not null);
         _findChatCommand = new RelayCommand(FindChat, () => _pairingStage != PairingStage.Listening);
@@ -788,10 +790,36 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// What this PC calls itself in the Telegram messages. Empty falls back to the Windows computer
+    /// name rather than to nothing.
+    /// </summary>
+    public string DeviceName
+    {
+        get => _settings.DeviceName;
+        set
+        {
+            var trimmed = (value ?? string.Empty).Trim();
+            if (trimmed.Length > AppSettings.MaxDeviceNameLength)
+            {
+                trimmed = trimmed[..AppSettings.MaxDeviceNameLength].TrimEnd();
+            }
+
+            if (trimmed.Length == 0)
+            {
+                trimmed = Environment.MachineName;
+            }
+
+            SetSetting(_settings.DeviceName == trimmed, () => _settings.DeviceName = trimmed);
+        }
+    }
+
+    /// <summary>
     /// True once the marker file is in place. It does not promise the channel is open — Steam only
     /// reads the marker when it starts — which is what the status line beside the button is for.
     /// </summary>
     public bool DownloadControlEnabled => _downloads?.BridgeMarkerPresent ?? false;
+
+    public RelayCommand RestartSteamCommand => _restartSteamCommand;
 
     public string DownloadControlStatus
     {
@@ -881,6 +909,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 _testTelegramCommand.RaiseCanExecuteChanged();
                 _enableDownloadControlCommand.RaiseCanExecuteChanged();
+                _restartSteamCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -1395,15 +1424,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     return;
             }
 
-            var probe = await _downloads.ProbeAsync().ConfigureAwait(true);
-            DownloadControlStatus = probe.Outcome switch
-            {
-                ControlOutcome.Done => $"✓ {Loc.Get("Telegram.ControlReady")}",
-                ControlOutcome.RestartSteam => Loc.Get("Telegram.ControlRestartSteam"),
-                ControlOutcome.SteamNotRunning => Loc.Get("Telegram.ControlSteamNotRunning"),
-                ControlOutcome.PortBusy => $"✕ {Loc.Get("Telegram.ControlPortBusy")}",
-                _ => $"✕ {Loc.F("Telegram.ControlFailed", probe.Detail ?? probe.Outcome.ToString())}",
-            };
+            await ReportChannelAsync().ConfigureAwait(true);
         }
         catch (Exception e)
         {
@@ -1413,6 +1434,76 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             TelegramBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Closes Steam and starts it again with its control channel on a port nothing else is using.
+    /// The way out when the default port was taken at the moment Steam started — Steam chooses the
+    /// port once and never revisits it.
+    /// </summary>
+    private async void RestartSteam()
+    {
+        if (_downloads is null)
+        {
+            return;
+        }
+
+        TelegramBusy = true;
+        DownloadControlStatus = Loc.Get("Telegram.ControlRestarting");
+
+        try
+        {
+            var restart = await _downloads.RestartSteamAsync().ConfigureAwait(true);
+            OnPropertyChanged(nameof(DownloadControlEnabled));
+
+            switch (restart.Outcome)
+            {
+                case RelaunchOutcome.SteamNotFound:
+                    DownloadControlStatus = $"✕ {Loc.Get("Telegram.ControlSteamNotFound")}";
+                    return;
+
+                case RelaunchOutcome.WouldNotClose:
+                    DownloadControlStatus = $"✕ {Loc.Get("Telegram.ControlWouldNotClose")}";
+                    return;
+
+                case RelaunchOutcome.WouldNotStart:
+                    DownloadControlStatus =
+                        $"✕ {Loc.F("Telegram.ControlFailed", restart.Detail ?? string.Empty)}";
+                    return;
+            }
+
+            // Steam takes a few seconds to bring its windows up, and the channel is not there until
+            // the shared context exists.
+            await Task.Delay(TimeSpan.FromSeconds(6)).ConfigureAwait(true);
+            await ReportChannelAsync().ConfigureAwait(true);
+        }
+        catch (Exception e)
+        {
+            DownloadControlStatus = $"✕ {e.Message}";
+        }
+        finally
+        {
+            TelegramBusy = false;
+        }
+    }
+
+    /// <summary>Probes the channel and puts the outcome, in the user's words, under the buttons.</summary>
+    private async Task ReportChannelAsync()
+    {
+        if (_downloads is null)
+        {
+            return;
+        }
+
+        var probe = await _downloads.ProbeAsync().ConfigureAwait(true);
+        DownloadControlStatus = probe.Outcome switch
+        {
+            ControlOutcome.Done => $"✓ {Loc.F("Telegram.ControlReady", _downloads.ActivePort)}",
+            ControlOutcome.RestartSteam => Loc.Get("Telegram.ControlRestartSteam"),
+            ControlOutcome.SteamNotRunning => Loc.Get("Telegram.ControlSteamNotRunning"),
+            ControlOutcome.PortBusy => $"✕ {Loc.Get("Telegram.ControlPortBusy")}",
+            _ => $"✕ {Loc.F("Telegram.ControlFailed", probe.Detail ?? probe.Outcome.ToString())}",
+        };
     }
 
     /// <summary>

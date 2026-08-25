@@ -42,6 +42,9 @@ public sealed class TelegramCommandListener(
     /// <summary>The download at the front of the queue, which a resume needs to nudge by name.</summary>
     public Func<uint?>? CurrentAppId { get; set; }
 
+    /// <summary>What this PC is called, both for the message headers and for "/pause &lt;name&gt;".</summary>
+    public Func<string?>? DeviceName { get; set; }
+
     public bool IsListening => _running is not null;
 
     /// <summary>
@@ -222,7 +225,7 @@ public sealed class TelegramCommandListener(
             return;
         }
 
-        if (update.Message is not { } message || BotCommands.Parse(message.Text) is not { } command)
+        if (update.Message is not { } message || BotCommands.Parse(message.Text) is not { } instruction)
         {
             return;
         }
@@ -235,9 +238,18 @@ public sealed class TelegramCommandListener(
             return;
         }
 
+        var device = DeviceName?.Invoke();
+
+        if (!BotCommands.IsFor(instruction.Target, device))
+        {
+            // "/pause laptop" sent to a chat that several PCs report into. Staying quiet rather than
+            // refusing keeps the chat to one answer — from the machine that was actually meant.
+            return;
+        }
+
         var language = options().Language;
 
-        switch (command)
+        switch (instruction.Command)
         {
             case BotCommand.Status:
                 await ReplyAsync(token, message.ChatId, StatusHtml(language), language, cancellationToken)
@@ -245,16 +257,23 @@ public sealed class TelegramCommandListener(
                 break;
 
             case BotCommand.Help:
-                await ReplyAsync(token, message.ChatId, NotificationMessages.Help(language), language, cancellationToken)
-                    .ConfigureAwait(false);
+                await ReplyAsync(
+                    token,
+                    message.ChatId,
+                    NotificationMessages.Help(language, device),
+                    language,
+                    cancellationToken).ConfigureAwait(false);
                 break;
 
             default:
-                var wanted = command == BotCommand.Pause ? DownloadCommand.Pause : DownloadCommand.Resume;
+                var wanted = instruction.Command == BotCommand.Pause
+                    ? DownloadCommand.Pause
+                    : DownloadCommand.Resume;
+
                 var result = await ApplyAsync(wanted, cancellationToken).ConfigureAwait(false);
                 var html = result.Success
-                    ? NotificationMessages.ControlDone(language, wanted)
-                    : NotificationMessages.ControlFailed(language, wanted, result.Outcome);
+                    ? NotificationMessages.ControlDone(language, wanted, device)
+                    : NotificationMessages.ControlFailed(language, wanted, result.Outcome, device);
 
                 await ReplyAsync(token, message.ChatId, html, language, cancellationToken).ConfigureAwait(false);
                 break;
@@ -284,6 +303,7 @@ public sealed class TelegramCommandListener(
         }
 
         var language = options().Language;
+        var device = DeviceName?.Invoke();
         var result = await ApplyAsync(wanted, cancellationToken).ConfigureAwait(false);
 
         await conversation.AnswerCallbackAsync(
@@ -293,8 +313,8 @@ public sealed class TelegramCommandListener(
             cancellationToken).ConfigureAwait(false);
 
         var html = result.Success
-            ? NotificationMessages.ControlDone(language, wanted)
-            : NotificationMessages.ControlFailed(language, wanted, result.Outcome);
+            ? NotificationMessages.ControlDone(language, wanted, device)
+            : NotificationMessages.ControlFailed(language, wanted, result.Outcome, device);
 
         await ReplyAsync(token, callback.ChatId, html, language, cancellationToken).ConfigureAwait(false);
     }
@@ -310,7 +330,8 @@ public sealed class TelegramCommandListener(
     }
 
     private string StatusHtml(MessageLanguage language) =>
-        Status?.Invoke() ?? NotificationMessages.Status(language, null, 0, null, false, default);
+        Status?.Invoke()
+        ?? NotificationMessages.Status(language, null, 0, null, false, default, DeviceName?.Invoke());
 
     /// <summary>Every reply carries the buttons, so the next pause is one tap rather than a command.</summary>
     private Task ReplyAsync(

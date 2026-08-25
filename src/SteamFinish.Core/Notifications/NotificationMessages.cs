@@ -16,19 +16,30 @@ public static class NotificationMessages
 {
     private const string Header = "🎮 <b>SteamFinish</b>";
 
+    /// <summary>
+    /// The header, with the PC named after it when there is a name to use. A chat can hear from
+    /// several machines — one bot each — so every message says which one is speaking.
+    /// </summary>
+    private static string HeaderFor(string? device) =>
+        string.IsNullOrWhiteSpace(device) ? Header : $"{Header} · {Escape(device.Trim())}";
+
     /// <summary>Escapes the three characters Telegram's HTML mode treats as markup.</summary>
     public static string Escape(string text) => text
         .Replace("&", "&amp;", StringComparison.Ordinal)
         .Replace("<", "&lt;", StringComparison.Ordinal)
         .Replace(">", "&gt;", StringComparison.Ordinal);
 
-    public static string DownloadStarted(MessageLanguage language, AppActivity app, int queueCount)
+    public static string DownloadStarted(
+        MessageLanguage language,
+        AppActivity app,
+        int queueCount,
+        string? device = null)
     {
         var name = Escape(app.Name);
         var size = Humanize.Bytes(app.BytesToDownload);
 
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
 
         if (language == MessageLanguage.Arabic)
@@ -59,7 +70,8 @@ public static class NotificationMessages
         int reachedPercent,
         double networkBytesPerSecond,
         TimeSpan? eta,
-        int queueCount)
+        int queueCount,
+        string? device = null)
     {
         var name = Escape(app.Name);
         var fraction = reachedPercent / 100d;
@@ -68,7 +80,7 @@ public static class NotificationMessages
         var rate = Humanize.Rate(networkBytesPerSecond);
 
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
 
         if (language == MessageLanguage.Arabic)
@@ -105,10 +117,11 @@ public static class NotificationMessages
         MessageLanguage language,
         DownloadSummary summary,
         PowerAction action,
-        int countdownSeconds)
+        int countdownSeconds,
+        string? device = null)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
 
         var arabic = language == MessageLanguage.Arabic;
@@ -162,10 +175,11 @@ public static class NotificationMessages
     public static string FinishedWithoutDetails(
         MessageLanguage language,
         PowerAction action,
-        int countdownSeconds)
+        int countdownSeconds,
+        string? device = null)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
 
         if (language == MessageLanguage.Arabic)
@@ -186,7 +200,11 @@ public static class NotificationMessages
         return builder.ToString().TrimEnd();
     }
 
-    public static string Cancelled(MessageLanguage language, PowerAction action, CountdownCancelReason reason)
+    public static string Cancelled(
+        MessageLanguage language,
+        PowerAction action,
+        CountdownCancelReason reason,
+        string? device = null)
     {
         var arabic = language == MessageLanguage.Arabic;
         var why = reason switch
@@ -197,7 +215,7 @@ public static class NotificationMessages
         };
 
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
         builder.AppendLine(arabic
             ? $"🛑 تم إلغاء <b>{ArabicAction(action)}</b>"
@@ -232,11 +250,12 @@ public static class NotificationMessages
         MessageLanguage language,
         RemoteDecision decision,
         PowerAction action,
-        string who)
+        string who,
+        string? device = null)
     {
         var by = string.IsNullOrWhiteSpace(who) ? string.Empty : $" · {Escape(who)}";
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
 
         if (language == MessageLanguage.Arabic)
@@ -264,10 +283,14 @@ public static class NotificationMessages
     }
 
     /// <summary>Replaces the countdown message when the outcome was decided at the PC instead.</summary>
-    public static string DecidedAtThePc(MessageLanguage language, PowerAction action, bool executed)
+    public static string DecidedAtThePc(
+        MessageLanguage language,
+        PowerAction action,
+        bool executed,
+        string? device = null)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
 
         if (language == MessageLanguage.Arabic)
@@ -312,10 +335,10 @@ public static class NotificationMessages
         };
     }
 
-    public static string ControlDone(MessageLanguage language, DownloadCommand command)
+    public static string ControlDone(MessageLanguage language, DownloadCommand command, string? device = null)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
 
         if (language == MessageLanguage.Arabic)
@@ -344,7 +367,11 @@ public static class NotificationMessages
     /// Every failure gets its own sentence, because each one is a different thing for the user to
     /// do — restarting Steam, freeing a port, or turning the feature on in the first place.
     /// </summary>
-    public static string ControlFailed(MessageLanguage language, DownloadCommand command, ControlOutcome outcome)
+    public static string ControlFailed(
+        MessageLanguage language,
+        DownloadCommand command,
+        ControlOutcome outcome,
+        string? device = null)
     {
         var arabic = language == MessageLanguage.Arabic;
         var what = command == DownloadCommand.Pause
@@ -377,7 +404,7 @@ public static class NotificationMessages
         };
 
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
         builder.AppendLine(arabic ? $"⚠️ <b>تعذّر {what}</b>" : $"⚠️ <b>Could not {what}</b>");
         builder.AppendLine(why);
@@ -392,11 +419,12 @@ public static class NotificationMessages
         double networkBytesPerSecond,
         TimeSpan? eta,
         bool monitoring,
-        PowerAction action)
+        PowerAction action,
+        string? device = null)
     {
         var arabic = language == MessageLanguage.Arabic;
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
 
         if (snapshot is not { IsReliable: true })
@@ -455,10 +483,10 @@ public static class NotificationMessages
     }
 
     /// <summary>What the bot understands, sent for <c>/help</c> and for the first <c>/start</c>.</summary>
-    public static string Help(MessageLanguage language)
+    public static string Help(MessageLanguage language, string? device = null)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
 
         if (language == MessageLanguage.Arabic)
@@ -469,6 +497,16 @@ public static class NotificationMessages
             builder.AppendLine("/status — عرض حالة التنزيل الحالية");
             builder.AppendLine("/help — هذه القائمة");
             builder.AppendLine();
+
+            if (!string.IsNullOrWhiteSpace(device))
+            {
+                builder.AppendLine(
+                    $"هذه الحاسبة اسمها <b>{Escape(device.Trim())}</b>. "
+                    + "إن كانت أكثر من حاسبة تراسل هذه المحادثة، أضف الاسم بعد الأمر لتخصّها وحدها، "
+                    + $"مثل <code>/pause {Escape(device.Trim())}</code>.");
+                builder.AppendLine();
+            }
+
             builder.AppendLine("<i>الإيقاف والاستئناف يخصّان Steam فقط؛ تطبيق Xbox لا يوفّر أي وسيلة تحكم.</i>");
         }
         else
@@ -479,16 +517,26 @@ public static class NotificationMessages
             builder.AppendLine("/status — what is downloading right now");
             builder.AppendLine("/help — this list");
             builder.AppendLine();
+
+            if (!string.IsNullOrWhiteSpace(device))
+            {
+                builder.AppendLine(
+                    $"This PC is called <b>{Escape(device.Trim())}</b>. If more than one reports into "
+                    + "this chat, add the name after a command to reach just that one, like "
+                    + $"<code>/pause {Escape(device.Trim())}</code>.");
+                builder.AppendLine();
+            }
+
             builder.AppendLine("<i>Pause and resume cover Steam only; the Xbox app offers no way to control it.</i>");
         }
 
         return builder.ToString().TrimEnd();
     }
 
-    public static string Test(MessageLanguage language)
+    public static string Test(MessageLanguage language, string? device = null)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(Header);
+        builder.AppendLine(HeaderFor(device));
         builder.AppendLine();
 
         if (language == MessageLanguage.Arabic)

@@ -29,7 +29,10 @@ public enum ControlOutcome
     /// <summary>The marker file exists but Steam has not been restarted since, so the channel is shut.</summary>
     RestartSteam,
 
-    /// <summary>Something that is not Steam is holding the port the channel needs.</summary>
+    /// <summary>
+    /// Something that is not Steam is holding the port the channel would use, and Steam has no
+    /// other one open. Restarting Steam on a free port is the way out.
+    /// </summary>
     PortBusy,
 
     /// <summary>Steam answered but refused the call — a client too old to have the download API.</summary>
@@ -90,4 +93,17 @@ public interface IDownloadController
 
     /// <summary>True when the marker file is in place — which is not the same as the channel being open.</summary>
     bool BridgeMarkerPresent { get; }
+
+    /// <summary>
+    /// The port the channel was last reached on, or <c>null</c> when it has not been reached. The
+    /// port is discovered rather than configured: Steam defaults to 8080 but can be started on any
+    /// other, so the app asks Windows which ports Steam holds instead of assuming.
+    /// </summary>
+    int? ActivePort { get; }
+
+    /// <summary>
+    /// Closes Steam and starts it again with its control channel on a port nothing else is using.
+    /// The only way out when the default port was taken at the moment Steam started.
+    /// </summary>
+    Task<RelaunchResult> RestartSteamAsync(CancellationToken cancellationToken = default);
 }

@@ -14,10 +14,14 @@ public sealed class TelegramNotifier(
     Func<TelegramOptions> options,
     ITelegramSender client,
     ILog? log = null,
-    ITelegramRemoteControl? remote = null)
+    ITelegramRemoteControl? remote = null,
+    Func<string?>? device = null)
 {
     private readonly ILog _log = log ?? NullLog.Instance;
     private readonly Dictionary<uint, int> _lastStep = [];
+
+    /// <summary>What this PC is called, put at the top of every message it sends.</summary>
+    private string? Device => device?.Invoke();
 
     private CancellationTokenSource? _prompt;
     private IReadOnlyList<PromptTarget> _promptTargets = [];
@@ -85,7 +89,7 @@ public sealed class TelegramNotifier(
                     // The message that says a download started is exactly where a pause button is
                     // wanted — but only when something is listening for it to be pressed.
                     Send(
-                        NotificationMessages.DownloadStarted(settings.Language, app, others),
+                        NotificationMessages.DownloadStarted(settings.Language, app, others, Device),
                         settings.RemoteCommands ? TelegramKeyboard.PauseResume(settings.Language) : null);
                 }
 
@@ -122,7 +126,8 @@ public sealed class TelegramNotifier(
                 reached * step,
                 meter.NetworkBytesPerSecond,
                 meter.Eta,
-                others));
+                others,
+                Device));
         }
     }
 
@@ -138,8 +143,8 @@ public sealed class TelegramNotifier(
         }
 
         var html = summary is null
-            ? NotificationMessages.FinishedWithoutDetails(settings.Language, action, countdownSeconds)
-            : NotificationMessages.Finished(settings.Language, summary, action, countdownSeconds);
+            ? NotificationMessages.FinishedWithoutDetails(settings.Language, action, countdownSeconds, Device)
+            : NotificationMessages.Finished(settings.Language, summary, action, countdownSeconds, Device);
 
         if (remote is null || !settings.RemoteButtons || !settings.IsUsable)
         {
@@ -164,7 +169,7 @@ public sealed class TelegramNotifier(
         var settings = options();
         if (settings.NotifyOnCancel)
         {
-            Send(NotificationMessages.Cancelled(settings.Language, action, reason));
+            Send(NotificationMessages.Cancelled(settings.Language, action, reason, Device));
         }
     }
 
@@ -187,7 +192,7 @@ public sealed class TelegramNotifier(
         _ = remote.EditAllAsync(
             settings.BotToken,
             targets,
-            NotificationMessages.DecidedAtThePc(settings.Language, action, executed));
+            NotificationMessages.DecidedAtThePc(settings.Language, action, executed, Device));
     }
 
     /// <summary>
@@ -244,7 +249,8 @@ public sealed class TelegramNotifier(
                     settings.Language,
                     outcome.Decision,
                     action,
-                    outcome.Callback.From)).ConfigureAwait(false);
+                    outcome.Callback.From,
+                    Device)).ConfigureAwait(false);
 
             _promptTargets = [];
             _suppressCancelMessage = outcome.Decision == RemoteDecision.Skip;
@@ -275,7 +281,7 @@ public sealed class TelegramNotifier(
 
         // The test must work before the feature is switched on, otherwise it could never be set up.
         settings.Enabled = true;
-        return client.TestAsync(settings, NotificationMessages.Test(settings.Language), cancellationToken);
+        return client.TestAsync(settings, NotificationMessages.Test(settings.Language, Device), cancellationToken);
     }
 
     /// <summary>Which progress step the app currently sits in.</summary>

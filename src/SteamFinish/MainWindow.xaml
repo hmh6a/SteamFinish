@@ -500,6 +500,15 @@
                                 <TextBlock Text="{m:Tr Telegram.RemoteButtonsHint}" Style="{StaticResource MutedText}"
                                            Margin="28,-6,0,10" />
 
+                                <TextBlock Text="{m:Tr Telegram.DeviceName}" Style="{StaticResource MutedText}"
+                                           Margin="0,10,0,4" />
+                                <TextBox Style="{StaticResource NumberBox}" Width="Auto"
+                                         HorizontalContentAlignment="Left"
+                                         MaxLength="40"
+                                         Text="{Binding DeviceName, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="{m:Tr Telegram.DeviceNameHint}" Style="{StaticResource MutedText}"
+                                           Margin="0,4,0,10" />
+
                                 <CheckBox Style="{StaticResource SettingCheckBox}" Margin="0,4,0,0"
                                           Content="{m:Tr Telegram.RemoteCommands}"
                                           IsChecked="{Binding TelegramRemoteCommands}" />
@@ -513,6 +522,12 @@
                                 <Button Content="{m:Tr Telegram.EnableDownloadControl}"
                                         Style="{StaticResource SecondaryButton}"
                                         Command="{Binding EnableDownloadControlCommand}"
+                                        HorizontalAlignment="Left" />
+                                <TextBlock Text="{m:Tr Telegram.RestartSteamHint}" Style="{StaticResource MutedText}"
+                                           Margin="0,8,0,6" />
+                                <Button Content="{m:Tr Telegram.RestartSteam}"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Command="{Binding RestartSteamCommand}"
                                         HorizontalAlignment="Left" />
                                 <TextBlock Text="{Binding DownloadControlStatus}" Margin="0,6,0,10">
                                     <TextBlock.Style>

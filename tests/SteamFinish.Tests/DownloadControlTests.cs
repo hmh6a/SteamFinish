@@ -1,3 +1,5 @@
+using SteamFinish.Core.Monitoring;
+using SteamFinish.Core.Settings;
 using SteamFinish.Core.Control;
 using SteamFinish.Core.Notifications;
 using SteamFinish.Core.Power;
@@ -18,20 +20,54 @@ public class BotCommandTests
     [InlineData("/start", BotCommand.Help)]
     public void TheCommandsAreRecognised(string text, BotCommand expected)
     {
-        Assert.Equal(expected, BotCommands.Parse(text));
+        Assert.Equal(expected, BotCommands.Parse(text)!.Command);
     }
 
     [Fact]
     public void AGroupMentionIsTrimmed()
     {
         // Telegram rewrites commands sent in a group as /pause@thebot.
-        Assert.Equal(BotCommand.Pause, BotCommands.Parse("/pause@steamfinish_bot"));
+        Assert.Equal(BotCommand.Pause, BotCommands.Parse("/pause@steamfinish_bot")!.Command);
     }
 
     [Fact]
-    public void ArgumentsAfterTheCommandAreIgnored()
+    public void ACommandOnItsOwnIsForWhoeverIsReading()
     {
-        Assert.Equal(BotCommand.Resume, BotCommands.Parse("  /resume everything now  "));
+        Assert.Null(BotCommands.Parse("/resume")!.Target);
+        Assert.True(BotCommands.IsFor(null, "DESKTOP-4F1QK"));
+    }
+
+    [Fact]
+    public void WhatFollowsTheCommandNamesAPc()
+    {
+        var instruction = BotCommands.Parse("  /resume  laptop  ")!;
+
+        Assert.Equal(BotCommand.Resume, instruction.Command);
+        Assert.Equal("laptop", instruction.Target);
+    }
+
+    [Fact]
+    public void APcNameWithSpacesSurvives()
+    {
+        Assert.Equal("Living Room PC", BotCommands.Parse("/pause Living Room PC")!.Target);
+    }
+
+    [Theory]
+    [InlineData("DESKTOP-4F1QK", true)]
+    [InlineData("desktop-4f1qk", true)]
+    [InlineData("desk", true)]
+    [InlineData("laptop", false)]
+    [InlineData("desktop-9", false)]
+    public void ANamedCommandOnlyReachesTheMachineItNames(string target, bool expected)
+    {
+        Assert.Equal(expected, BotCommands.IsFor(target, "DESKTOP-4F1QK"));
+    }
+
+    [Fact]
+    public void AMachineWithNoNameAnswersOnlyUnnamedCommands()
+    {
+        Assert.True(BotCommands.IsFor(null, null));
+        Assert.False(BotCommands.IsFor("laptop", null));
     }
 
     [Theory]
@@ -490,6 +526,59 @@ public class CommandListenerTests
     }
 
     [Fact]
+    public async Task ACommandAimedAtAnotherPcIsLeftForThatPc()
+    {
+        var conversation = new ScriptedConversation(
+            Batch(),
+            Batch(Typed(1, "111", "/pause laptop")));
+
+        var ran = false;
+        using var listener = new TelegramCommandListener(Paired, conversation)
+        {
+            DeviceName = () => "DESKTOP-4F1QK",
+            Control = (_, _, _) =>
+            {
+                ran = true;
+                return Task.FromResult(ControlResult.Done());
+            },
+        };
+
+        listener.Sync();
+        await conversation.Drained;
+
+        Assert.False(ran);
+
+        // Silence, not a refusal: the chat should end up with one answer, from the right machine.
+        Assert.Empty(conversation.Replies);
+    }
+
+    [Fact]
+    public async Task ACommandAimedAtThisPcIsCarriedOut()
+    {
+        var conversation = new ScriptedConversation(
+            Batch(),
+            Batch(Typed(1, "111", "/pause desktop")));
+
+        var ran = false;
+        using var listener = new TelegramCommandListener(Paired, conversation)
+        {
+            DeviceName = () => "DESKTOP-4F1QK",
+            Control = (_, _, _) =>
+            {
+                ran = true;
+                return Task.FromResult(ControlResult.Done());
+            },
+        };
+
+        listener.Sync();
+        await conversation.Drained;
+
+        Assert.True(ran);
+        var (_, html, _) = Assert.Single(conversation.Replies);
+        Assert.Contains("DESKTOP-4F1QK", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AStatusCommandAnswersWithWhateverTheHostReports()
     {
         var conversation = new ScriptedConversation(
@@ -745,7 +834,7 @@ public class SteamBridgeWireTests
             return Evaluated(expression);
         });
 
-        using var bridge = new SteamCefBridge(port: steam.Port);
+        using var bridge = new SteamCefBridge(null, steam.Port);
         var reply = await bridge.EvaluateAsync(
             """(function(){SteamClient.Downloads.EnableAllDownloads(false);return "ok";})()""",
             CancellationToken.None);
@@ -760,7 +849,7 @@ public class SteamBridgeWireTests
     {
         // Steam lists several pages; only the offscreen one has the SteamClient object on it.
         using var steam = FakeDevToolsEndpoint.LikeSteam(_ => Evaluated("EnableAllDownloads(false)"));
-        using var bridge = new SteamCefBridge(port: steam.Port);
+        using var bridge = new SteamCefBridge(null, steam.Port);
 
         var reply = await bridge.EvaluateAsync("1", CancellationToken.None);
 
@@ -780,7 +869,7 @@ public class SteamBridgeWireTests
             },
         }));
 
-        using var bridge = new SteamCefBridge(port: steam.Port);
+        using var bridge = new SteamCefBridge(null, steam.Port);
         var reply = await bridge.EvaluateAsync("1", CancellationToken.None);
 
         Assert.Equal(ControlOutcome.Refused, reply.Outcome);
@@ -791,7 +880,7 @@ public class SteamBridgeWireTests
     public async Task ADevToolsEndpointThatIsNotSteamsIsNotMistakenForIt()
     {
         using var other = FakeDevToolsEndpoint.WithoutSharedContext();
-        using var bridge = new SteamCefBridge(port: other.Port);
+        using var bridge = new SteamCefBridge(null, other.Port);
 
         var reply = await bridge.EvaluateAsync("1", CancellationToken.None);
 
@@ -803,7 +892,7 @@ public class SteamBridgeWireTests
     {
         // This is not hypothetical: Docker and WSL both like port 8080.
         using var squatter = FakeDevToolsEndpoint.NotDevToolsAtAll();
-        using var bridge = new SteamCefBridge(port: squatter.Port);
+        using var bridge = new SteamCefBridge(null, squatter.Port);
 
         var reply = await bridge.EvaluateAsync("1", CancellationToken.None);
 
@@ -820,7 +909,7 @@ public class SteamBridgeWireTests
             free = probe.Port;
         }
 
-        using var bridge = new SteamCefBridge(port: free);
+        using var bridge = new SteamCefBridge(null, free);
         var reply = await bridge.EvaluateAsync("1", CancellationToken.None);
 
         Assert.Contains(reply.Outcome, new[] { ControlOutcome.RestartSteam, ControlOutcome.SteamNotRunning });
@@ -888,6 +977,119 @@ public class SteamBridgeWireTests
     }
 }
 
+public class SteamPortTests
+{
+    [Fact]
+    public void AFreePortIsReallyFree()
+    {
+        var port = SteamPorts.FindFreePort();
+
+        Assert.InRange(port, 1024, 65535);
+        Assert.True(SteamPorts.IsPortFree(port));
+    }
+
+    [Fact]
+    public void APortInUseIsNotOfferedAsFree()
+    {
+        using var held = FakeDevToolsEndpoint.NotDevToolsAtAll();
+
+        Assert.False(SteamPorts.IsPortFree(held.Port));
+        Assert.NotEqual(held.Port, SteamPorts.FindFreePort());
+    }
+
+    [Fact]
+    public void TheListenerTableIsReadWithoutBlowingUp()
+    {
+        // Whether Steam is running here is not knowable, but the table has to parse either way —
+        // a misread row would hand back nonsense port numbers rather than nothing.
+        foreach (var port in SteamPorts.ListeningPorts())
+        {
+            Assert.InRange(port, 1, 65535);
+        }
+    }
+}
+
+public class PortDiscoveryTests
+{
+    [Fact]
+    public async Task SteamIsFoundOnAPortThatIsNotTheDefault()
+    {
+        // The whole point: a Steam started with -devtools-port is found without being told.
+        using var steam = FakeDevToolsEndpoint.LikeSteam(_ => Answered("ok"));
+        using var bridge = new SteamCefBridge(null, SteamPorts.FindFreePort(), steam.Port);
+
+        var reply = await bridge.EvaluateAsync("1", CancellationToken.None);
+
+        Assert.Equal(ControlOutcome.Done, reply.Outcome);
+        Assert.Equal(steam.Port, bridge.LastGoodPort);
+    }
+
+    [Fact]
+    public async Task SteamIsFoundEvenWithSomethingElseHoldingTheFirstPort()
+    {
+        using var squatter = FakeDevToolsEndpoint.NotDevToolsAtAll();
+        using var steam = FakeDevToolsEndpoint.LikeSteam(_ => Answered("ok"));
+        using var bridge = new SteamCefBridge(null, squatter.Port, steam.Port);
+
+        var reply = await bridge.EvaluateAsync("1", CancellationToken.None);
+
+        Assert.Equal(ControlOutcome.Done, reply.Outcome);
+        Assert.Equal(steam.Port, bridge.LastGoodPort);
+    }
+
+    [Fact]
+    public async Task ThePortThatWorkedIsRememberedAndTriedFirst()
+    {
+        using var steam = FakeDevToolsEndpoint.LikeSteam(_ => Answered("ok"));
+        using var bridge = new SteamCefBridge(null, steam.Port);
+
+        await bridge.EvaluateAsync("1", CancellationToken.None);
+        Assert.Equal(steam.Port, bridge.LastGoodPort);
+
+        await bridge.EvaluateAsync("1", CancellationToken.None);
+        Assert.Equal(steam.Port, bridge.LastGoodPort);
+    }
+
+    [Fact]
+    public async Task APortThatStopsWorkingIsForgotten()
+    {
+        int port;
+        using (var steam = FakeDevToolsEndpoint.LikeSteam(_ => Answered("ok")))
+        {
+            port = steam.Port;
+            using var live = new SteamCefBridge(null, port);
+            await live.EvaluateAsync("1", CancellationToken.None);
+            Assert.Equal(port, live.LastGoodPort);
+        }
+
+        using var afterwards = new SteamCefBridge(null, port);
+        await afterwards.EvaluateAsync("1", CancellationToken.None);
+
+        Assert.Null(afterwards.LastGoodPort);
+    }
+
+    [Fact]
+    public async Task AnotherProgramOnEveryCandidateIsReportedAsAPortClash()
+    {
+        // Nothing found, but something answered — which is a different problem from silence, and
+        // the one the restart button fixes.
+        using var first = FakeDevToolsEndpoint.NotDevToolsAtAll();
+        using var second = FakeDevToolsEndpoint.NotDevToolsAtAll();
+        using var bridge = new SteamCefBridge(null, first.Port, second.Port);
+
+        var reply = await bridge.EvaluateAsync("1", CancellationToken.None);
+
+        Assert.Equal(ControlOutcome.PortBusy, reply.Outcome);
+    }
+
+    private static string Answered(string value) =>
+        System.Text.Json.JsonSerializer.Serialize(new
+        {
+            id = 1,
+            result = new { result = new { type = "string", value } },
+        });
+}
+
 public class ControlSettingsTests
 {
     [Fact]
@@ -897,5 +1099,91 @@ public class ControlSettingsTests
 
         Assert.False(options.Clone().RemoteCommands);
         Assert.True(new TelegramOptions().Clone().RemoteCommands);
+    }
+}
+
+public class DeviceNameTests
+{
+    [Fact]
+    public void AnUnsetNameBecomesTheWindowsComputerName()
+    {
+        // Upgrading from a build without this setting starts naming the PC straight away.
+        Assert.Equal(Environment.MachineName, new AppSettings().Normalize().DeviceName);
+    }
+
+    [Fact]
+    public void AChosenNameIsKept()
+    {
+        var settings = new AppSettings { DeviceName = "  Living Room PC  " }.Normalize();
+
+        Assert.Equal("Living Room PC", settings.DeviceName);
+    }
+
+    [Fact]
+    public void ARidiculousNameIsCutDown()
+    {
+        var settings = new AppSettings { DeviceName = new string('x', 200) }.Normalize();
+
+        Assert.Equal(AppSettings.MaxDeviceNameLength, settings.DeviceName.Length);
+    }
+
+    [Fact]
+    public void TheNameSurvivesACopy()
+    {
+        var settings = new AppSettings { DeviceName = "Attic" };
+
+        Assert.Equal("Attic", settings.Clone().DeviceName);
+    }
+
+    [Theory]
+    [InlineData(MessageLanguage.English)]
+    [InlineData(MessageLanguage.Arabic)]
+    public void EveryMessageSaysWhichPcItCameFrom(MessageLanguage language)
+    {
+        const string Device = "Living Room PC";
+
+        var messages = new[]
+        {
+            NotificationMessages.DownloadStarted(language, App(AppStateFlags.Downloading, toDownload: 10), 0, Device),
+            NotificationMessages.FinishedWithoutDetails(language, PowerAction.Shutdown, 60, Device),
+            NotificationMessages.Cancelled(language, PowerAction.Shutdown, CountdownCancelReason.User, Device),
+            NotificationMessages.ControlDone(language, DownloadCommand.Pause, Device),
+            NotificationMessages.ControlFailed(language, DownloadCommand.Pause, ControlOutcome.PortBusy, Device),
+            NotificationMessages.Status(language, Idle(), 0, null, false, PowerAction.Shutdown, Device),
+            NotificationMessages.Help(language, Device),
+            NotificationMessages.Test(language, Device),
+        };
+
+        foreach (var message in messages)
+        {
+            Assert.Contains(Device, message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void WithNoNameTheHeaderIsLeftPlain()
+    {
+        var message = NotificationMessages.ControlDone(MessageLanguage.English, DownloadCommand.Pause);
+
+        Assert.Contains("SteamFinish", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("·", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void APcNameCannotInjectMarkup()
+    {
+        var message = NotificationMessages.ControlDone(
+            MessageLanguage.English, DownloadCommand.Pause, "<b>evil</b>");
+
+        Assert.DoesNotContain("<b>evil", message, StringComparison.Ordinal);
+        Assert.Contains("&lt;b&gt;evil", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheHelpTextExplainsHowToReachOnePcOutOfSeveral()
+    {
+        var help = NotificationMessages.Help(MessageLanguage.English, "laptop");
+
+        Assert.Contains("/pause laptop", help, StringComparison.Ordinal);
     }
 }

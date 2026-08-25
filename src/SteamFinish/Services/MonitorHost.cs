@@ -66,6 +66,7 @@ public sealed class MonitorHost : IDisposable
                 // A resume needs to name the download at the head of the queue: flipping the global
                 // switch back on does not restart a game that was paused individually.
                 CurrentAppId = () => LastSnapshot?.Headline?.AppId,
+                DeviceName = () => _settings().DeviceName,
             };
         }
 
@@ -406,7 +407,8 @@ public sealed class MonitorHost : IDisposable
             Meter.NetworkBytesPerSecond,
             Meter.Eta,
             Engine.IsEnabled,
-            settings.Action);
+            settings.Action,
+            settings.DeviceName);
     }
 
     /// <summary>Applies a decision taken from the Telegram buttons.</summary>

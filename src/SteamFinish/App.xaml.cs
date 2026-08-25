@@ -84,7 +84,12 @@ public partial class App : Application
         var power = new WindowsPowerController(_log);
 
         _telegramClient = new TelegramClient(_log);
-        var telegram = new TelegramNotifier(() => _settings!.Telegram, _telegramClient, _log, _telegramClient);
+        var telegram = new TelegramNotifier(
+            () => _settings!.Telegram,
+            _telegramClient,
+            _log,
+            _telegramClient,
+            () => _settings!.DeviceName);
 
         // Pausing a download is a Steam-only trick, and one Steam allows only through its own
         // JavaScript — see SteamCefBridge for why there is no simpler route.

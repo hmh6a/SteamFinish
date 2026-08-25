@@ -13,6 +13,14 @@ public sealed class AppSettings
     public const int MinConfirmationSeconds = 10;
     public const int MaxConfirmationSeconds = 900;
 
+    public const int MaxDeviceNameLength = 40;
+
+    /// <summary>
+    /// What this PC is called in the Telegram messages. Defaults to the Windows computer name, so a
+    /// chat that hears from more than one machine says which one is speaking without being set up.
+    /// </summary>
+    public string DeviceName { get; set; } = string.Empty;
+
     /// <summary>What to do once every download has finished.</summary>
     public PowerAction Action { get; set; } = PowerAction.Shutdown;
 
@@ -92,6 +100,19 @@ public sealed class AppSettings
     /// <summary>Clamps values that may have been edited by hand in the JSON file.</summary>
     public AppSettings Normalize()
     {
+        // Filled in rather than left blank, so upgrading from a build without this setting starts
+        // naming the PC straight away instead of waiting to be told.
+        DeviceName = DeviceName.Trim();
+        if (DeviceName.Length == 0)
+        {
+            DeviceName = Environment.MachineName;
+        }
+
+        if (DeviceName.Length > MaxDeviceNameLength)
+        {
+            DeviceName = DeviceName[..MaxDeviceNameLength].TrimEnd();
+        }
+
         CountdownSeconds = Math.Clamp(CountdownSeconds, MinCountdownSeconds, MaxCountdownSeconds);
         ConfirmationSeconds = Math.Clamp(ConfirmationSeconds, MinConfirmationSeconds, MaxConfirmationSeconds);
         PollIntervalSeconds = Math.Clamp(PollIntervalSeconds, 1, 60);

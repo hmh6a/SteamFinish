@@ -20,20 +20,26 @@ public enum BotCommand
 }
 
 /// <summary>
+/// A command, and which PC it was aimed at. <see cref="Target"/> is <c>null</c> when the user did
+/// not name one, which means "whoever is reading this".
+/// </summary>
+public sealed record BotInstruction(BotCommand Command, string? Target = null);
+
+/// <summary>
 /// Reads the slash commands the bot answers. Telegram appends <c>@thebot</c> to commands sent in a
 /// group, so the mention is trimmed before matching.
 /// </summary>
 public static class BotCommands
 {
-    public static BotCommand? Parse(string? text)
+    public static BotInstruction? Parse(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             return null;
         }
 
-        // Only the first word matters; anything after it is an argument we have no use for.
-        var word = text.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0];
+        var words = text.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var word = words[0];
         if (word.Length < 2 || word[0] != '/')
         {
             return null;
@@ -42,7 +48,7 @@ public static class BotCommands
         var at = word.IndexOf('@', StringComparison.Ordinal);
         var name = (at > 0 ? word[1..at] : word[1..]).ToLowerInvariant();
 
-        return name switch
+        var command = name switch
         {
             "pause" or "stop" => BotCommand.Pause,
             "resume" or "continue" => BotCommand.Resume,
@@ -51,8 +57,38 @@ public static class BotCommands
             // /start is what Telegram sends when someone first opens the bot, so it lands on the
             // list of what the bot can do rather than on nothing at all.
             "help" or "start" or "commands" => BotCommand.Help,
-            _ => null,
+            _ => (BotCommand?)null,
         };
+
+        if (command is not { } wanted)
+        {
+            return null;
+        }
+
+        // The rest of the line names a PC: "/pause laptop". Kept whole rather than split, because a
+        // computer name is allowed to have spaces in it.
+        var target = words.Length > 1 ? string.Join(' ', words[1..]).Trim() : null;
+        return new BotInstruction(wanted, string.IsNullOrEmpty(target) ? null : target);
+    }
+
+    /// <summary>
+    /// Whether a command aimed at <paramref name="target"/> is for the PC called
+    /// <paramref name="device"/>. An unnamed target is for everyone; a named one matches the whole
+    /// name or the start of it, so "/pause desk" reaches DESKTOP-4F1QK.
+    /// </summary>
+    public static bool IsFor(string? target, string? device)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(device))
+        {
+            return false;
+        }
+
+        return device.Trim().StartsWith(target.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 }
 

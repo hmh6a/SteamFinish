@@ -43,6 +43,12 @@ public sealed class TelegramOptions
     /// </summary>
     public bool RemoteButtons { get; set; } = true;
 
+    /// <summary>
+    /// Answer /pause, /resume and /status from the paired chats. Only chats in <see cref="ChatIds"/>
+    /// are obeyed, so holding the bot token is not on its own enough to stop someone's download.
+    /// </summary>
+    public bool RemoteCommands { get; set; } = true;
+
     public MessageLanguage Language { get; set; } = MessageLanguage.Arabic;
 
     /// <summary>True when there is enough configuration to attempt a send.</summary>
@@ -70,6 +76,7 @@ public sealed class TelegramOptions
         NotifyOnFinish = NotifyOnFinish,
         NotifyOnCancel = NotifyOnCancel,
         RemoteButtons = RemoteButtons,
+        RemoteCommands = RemoteCommands,
         Language = Language,
     };
 

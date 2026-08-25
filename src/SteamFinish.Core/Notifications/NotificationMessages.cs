@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using SteamFinish.Core.Control;
 using SteamFinish.Core.Formatting;
 using SteamFinish.Core.Monitoring;
 using SteamFinish.Core.Power;
@@ -280,6 +281,205 @@ public static class NotificationMessages
             builder.AppendLine(executed
                 ? $"⚡ <b>{action} started</b>"
                 : $"🛑 <b>{action} cancelled from the app</b>");
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    // ---------------------------------------------------------------- Pause and resume
+
+    public static string ButtonPause(MessageLanguage language) =>
+        language == MessageLanguage.Arabic ? "⏸ إيقاف مؤقت" : "⏸ Pause";
+
+    public static string ButtonResume(MessageLanguage language) =>
+        language == MessageLanguage.Arabic ? "▶️ استئناف" : "▶️ Resume";
+
+    /// <summary>The toast shown on the phone the instant a pause or resume button is pressed.</summary>
+    public static string ControlToast(MessageLanguage language, DownloadCommand command, bool success)
+    {
+        var arabic = language == MessageLanguage.Arabic;
+        if (!success)
+        {
+            return arabic ? "لم ينجح الأمر" : "That did not work";
+        }
+
+        return (arabic, command) switch
+        {
+            (true, DownloadCommand.Pause) => "تم الإيقاف المؤقت",
+            (true, _) => "تم الاستئناف",
+            (false, DownloadCommand.Pause) => "Paused",
+            _ => "Resumed",
+        };
+    }
+
+    public static string ControlDone(MessageLanguage language, DownloadCommand command)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine(Header);
+        builder.AppendLine();
+
+        if (language == MessageLanguage.Arabic)
+        {
+            builder.AppendLine(command == DownloadCommand.Pause
+                ? "⏸ <b>تم إيقاف التنزيل مؤقتاً</b>"
+                : "▶️ <b>تم استئناف التنزيل</b>");
+            builder.AppendLine(command == DownloadCommand.Pause
+                ? "الحاسبة لن تُطفأ ما دام التنزيل موقوفاً."
+                : "سيستأنف Steam من حيث توقّف.");
+        }
+        else
+        {
+            builder.AppendLine(command == DownloadCommand.Pause
+                ? "⏸ <b>Downloads paused</b>"
+                : "▶️ <b>Downloads resumed</b>");
+            builder.AppendLine(command == DownloadCommand.Pause
+                ? "The PC will not power off while the download is paused."
+                : "Steam picks up where it left off.");
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Every failure gets its own sentence, because each one is a different thing for the user to
+    /// do — restarting Steam, freeing a port, or turning the feature on in the first place.
+    /// </summary>
+    public static string ControlFailed(MessageLanguage language, DownloadCommand command, ControlOutcome outcome)
+    {
+        var arabic = language == MessageLanguage.Arabic;
+        var what = command == DownloadCommand.Pause
+            ? arabic ? "الإيقاف المؤقت" : "pause"
+            : arabic ? "الاستئناف" : "resume";
+
+        var why = (arabic, outcome) switch
+        {
+            (true, ControlOutcome.SteamNotRunning) => "‏Steam غير مشغّل.",
+            (true, ControlOutcome.SteamNotFound) => "لم يُعثر على Steam على هذه الحاسبة.",
+            (true, ControlOutcome.BridgeDisabled) =>
+                "التحكم بالتنزيل غير مفعّل. افتح SteamFinish ← الإعدادات ← تيليجرام واضغط «تفعيل التحكم بالتنزيل».",
+            (true, ControlOutcome.RestartSteam) => "أعد تشغيل Steam مرة واحدة ليعمل التحكم بالتنزيل.",
+            (true, ControlOutcome.PortBusy) =>
+                "المنفذ 8080 مشغول ببرنامج آخر، وهو المنفذ الوحيد الذي يستخدمه Steam. أغلق ذلك البرنامج ثم أعد تشغيل Steam.",
+            (true, ControlOutcome.Refused) => "رفض Steam الأمر.",
+            (true, _) => "انقطع الاتصال بـ Steam.",
+
+            (false, ControlOutcome.SteamNotRunning) => "Steam is not running.",
+            (false, ControlOutcome.SteamNotFound) => "Steam could not be found on this PC.",
+            (false, ControlOutcome.BridgeDisabled) =>
+                "Download control is switched off. Open SteamFinish → Settings → Telegram and press "
+                + "\"Enable download control\".",
+            (false, ControlOutcome.RestartSteam) => "Restart Steam once to let download control work.",
+            (false, ControlOutcome.PortBusy) =>
+                "Port 8080 is held by another program, and it is the only port Steam uses. Close that "
+                + "program and restart Steam.",
+            (false, ControlOutcome.Refused) => "Steam refused the command.",
+            _ => "The connection to Steam dropped.",
+        };
+
+        var builder = new StringBuilder();
+        builder.AppendLine(Header);
+        builder.AppendLine();
+        builder.AppendLine(arabic ? $"⚠️ <b>تعذّر {what}</b>" : $"⚠️ <b>Could not {what}</b>");
+        builder.AppendLine(why);
+
+        return builder.ToString().TrimEnd();
+    }
+
+    /// <summary>The answer to <c>/status</c>: what is downloading, how fast, and what happens next.</summary>
+    public static string Status(
+        MessageLanguage language,
+        DownloadSnapshot? snapshot,
+        double networkBytesPerSecond,
+        TimeSpan? eta,
+        bool monitoring,
+        PowerAction action)
+    {
+        var arabic = language == MessageLanguage.Arabic;
+        var builder = new StringBuilder();
+        builder.AppendLine(Header);
+        builder.AppendLine();
+
+        if (snapshot is not { IsReliable: true })
+        {
+            builder.AppendLine(arabic
+                ? "❔ تعذّرت قراءة حالة التنزيلات."
+                : "❔ The download state could not be read.");
+            return builder.ToString().TrimEnd();
+        }
+
+        if (snapshot.Headline is not { } app)
+        {
+            builder.AppendLine(arabic ? "💤 لا توجد تنزيلات جارية." : "💤 Nothing is downloading.");
+        }
+        else
+        {
+            var stopped = snapshot.IsPausedOrStalled(app);
+            var mark = stopped ? "⏸" : "⬇️";
+
+            builder.AppendLine($"{mark} <b>{Escape(app.Name)}</b>");
+            builder.AppendLine($"<code>{Humanize.Bar(app.Progress)}</code> {Humanize.Percent(app.Progress)}");
+            builder.AppendLine(
+                $"📦 {Humanize.Bytes(app.BytesDownloaded)} / {Humanize.Bytes(app.BytesToDownload)}");
+
+            if (stopped)
+            {
+                builder.AppendLine(arabic ? "⏸ التنزيل متوقف حالياً." : "⏸ The download is not moving.");
+            }
+            else
+            {
+                builder.AppendLine(eta is { } left
+                    ? arabic
+                        ? $"🚀 {Humanize.Rate(networkBytesPerSecond)} · ⏳ يتبقى {Humanize.Clock(left)}"
+                        : $"🚀 {Humanize.Rate(networkBytesPerSecond)} · ⏳ {Humanize.Clock(left)} left"
+                    : $"🚀 {Humanize.Rate(networkBytesPerSecond)}");
+            }
+
+            if (snapshot.Waiting.Count > 0)
+            {
+                builder.AppendLine(arabic
+                    ? $"📥 في الطابور: {snapshot.Waiting.Count}"
+                    : $"📥 In queue: {snapshot.Waiting.Count}");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine(monitoring
+            ? arabic
+                ? $"👁 المراقبة مفعّلة — سيتم <b>{ArabicAction(action)}</b> بعد انتهاء كل شيء."
+                : $"👁 Monitoring is on — <b>{action}</b> once everything is finished."
+            : arabic
+                ? "👁 المراقبة متوقفة — لن يحدث شيء للحاسبة."
+                : "👁 Monitoring is off — nothing will happen to the PC.");
+
+        return builder.ToString().TrimEnd();
+    }
+
+    /// <summary>What the bot understands, sent for <c>/help</c> and for the first <c>/start</c>.</summary>
+    public static string Help(MessageLanguage language)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine(Header);
+        builder.AppendLine();
+
+        if (language == MessageLanguage.Arabic)
+        {
+            builder.AppendLine("<b>الأوامر</b>");
+            builder.AppendLine("/pause — إيقاف تنزيلات Steam مؤقتاً");
+            builder.AppendLine("/resume — استئناف التنزيلات");
+            builder.AppendLine("/status — عرض حالة التنزيل الحالية");
+            builder.AppendLine("/help — هذه القائمة");
+            builder.AppendLine();
+            builder.AppendLine("<i>الإيقاف والاستئناف يخصّان Steam فقط؛ تطبيق Xbox لا يوفّر أي وسيلة تحكم.</i>");
+        }
+        else
+        {
+            builder.AppendLine("<b>Commands</b>");
+            builder.AppendLine("/pause — pause Steam downloads");
+            builder.AppendLine("/resume — start them again");
+            builder.AppendLine("/status — what is downloading right now");
+            builder.AppendLine("/help — this list");
+            builder.AppendLine();
+            builder.AppendLine("<i>Pause and resume cover Steam only; the Xbox app offers no way to control it.</i>");
         }
 
         return builder.ToString().TrimEnd();

@@ -9,7 +9,14 @@ public sealed record DiscoveredChat(string ChatId, string Title, string Kind)
     public string Describe() => $"{Title} ({Kind})";
 }
 
-public sealed record TelegramUpdate(long UpdateId, DiscoveredChat? Chat, TelegramCallback? Callback = null);
+/// <summary>A text message the bot received, cut down to what a command needs.</summary>
+public sealed record TelegramMessage(string ChatId, long MessageId, string Text, string From);
+
+public sealed record TelegramUpdate(
+    long UpdateId,
+    DiscoveredChat? Chat,
+    TelegramCallback? Callback = null,
+    TelegramMessage? Message = null);
 
 public sealed record TelegramUpdates(bool Ok, string Description, IReadOnlyList<TelegramUpdate> Updates)
 {
@@ -66,7 +73,11 @@ public static class TelegramUpdateReader
                     continue;
                 }
 
-                updates.Add(new TelegramUpdate(updateId, ReadChat(element), ReadCallback(element)));
+                updates.Add(new TelegramUpdate(
+                    updateId,
+                    ReadChat(element),
+                    ReadCallback(element),
+                    ReadMessage(element)));
             }
 
             return new TelegramUpdates(true, "ok", updates);
@@ -79,6 +90,52 @@ public static class TelegramUpdateReader
 
     /// <summary>The value for <c>allowed_updates</c> while waiting for a button press.</summary>
     public const string CallbackUpdatesJson = "[\"callback_query\"]";
+
+    /// <summary>The value for <c>allowed_updates</c> while listening for typed commands and buttons.</summary>
+    public const string CommandUpdatesJson = "[\"message\",\"channel_post\",\"callback_query\"]";
+
+    /// <summary>The kinds of update that can carry a typed command.</summary>
+    private static readonly string[] TextCarriers = ["message", "channel_post"];
+
+    /// <summary>Reads a typed message, if this update is one.</summary>
+    private static TelegramMessage? ReadMessage(JsonElement update)
+    {
+        foreach (var carrier in TextCarriers)
+        {
+            if (!update.TryGetProperty(carrier, out var message) || message.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            if (Text(message, "text") is not { Length: > 0 } text)
+            {
+                // A photo, a sticker, someone joining the group: nothing to act on.
+                continue;
+            }
+
+            if (!message.TryGetProperty("chat", out var chat)
+                || chat.ValueKind != JsonValueKind.Object
+                || !chat.TryGetProperty("id", out var chatId)
+                || !chatId.TryGetInt64(out var id))
+            {
+                continue;
+            }
+
+            var messageId = message.TryGetProperty("message_id", out var m) && m.TryGetInt64(out var parsed)
+                ? parsed
+                : 0;
+
+            var from = string.Empty;
+            if (message.TryGetProperty("from", out var sender) && sender.ValueKind == JsonValueKind.Object)
+            {
+                from = Text(sender, "first_name") ?? Text(sender, "username") ?? string.Empty;
+            }
+
+            return new TelegramMessage(id.ToString(), messageId, text, from);
+        }
+
+        return null;
+    }
 
     /// <summary>Reads an inline-button press, if this update is one.</summary>
     private static TelegramCallback? ReadCallback(JsonElement update)

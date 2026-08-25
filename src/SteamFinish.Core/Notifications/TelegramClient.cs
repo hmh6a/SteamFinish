@@ -14,16 +14,51 @@ public sealed record TelegramResult(bool Success, string Message, long? MessageI
 /// <summary>Posts messages to Telegram. Split out from the client so it can be substituted in tests.</summary>
 public interface ITelegramSender
 {
-    Task<TelegramResult> SendAsync(TelegramOptions options, string html, CancellationToken cancellationToken = default);
+    /// <param name="replyMarkup">
+    /// Inline buttons to hang off the message, as Telegram's <c>reply_markup</c> JSON.
+    /// </param>
+    Task<TelegramResult> SendAsync(
+        TelegramOptions options,
+        string html,
+        string? replyMarkup = null,
+        CancellationToken cancellationToken = default);
 
     Task<TelegramResult> TestAsync(TelegramOptions options, string html, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// The half of the client the command listener needs: read what the bot was sent, and answer the
+/// one chat that sent it. Kept separate so the listener can be driven by a scripted stand-in.
+/// </summary>
+public interface ITelegramConversation
+{
+    Task<TelegramUpdates> PollAsync(
+        string botToken,
+        long? offset,
+        int holdSeconds,
+        string allowedUpdates,
+        CancellationToken cancellationToken = default);
+
+    Task<TelegramResult> ReplyAsync(
+        string botToken,
+        string chatId,
+        string html,
+        string? replyMarkup = null,
+        CancellationToken cancellationToken = default);
+
+    Task AnswerCallbackAsync(
+        string botToken,
+        string callbackId,
+        string text,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// Minimal Telegram Bot API client — just enough to check a token and post messages.
 /// The token is never written to the log.
 /// </summary>
-public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, ITelegramRemoteControl, IDisposable
+public sealed class TelegramClient
+    : ITelegramSender, ITelegramChatFinder, ITelegramRemoteControl, ITelegramConversation, IDisposable
 {
     private const string ApiRoot = "https://api.telegram.org";
 
@@ -64,6 +99,7 @@ public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, ITele
     public async Task<TelegramResult> SendAsync(
         TelegramOptions options,
         string html,
+        string? replyMarkup = null,
         CancellationToken cancellationToken = default)
     {
         if (!TelegramOptions.LooksLikeToken(options.BotToken))
@@ -80,7 +116,7 @@ public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, ITele
         var failures = new List<string>();
         foreach (var chatId in chats)
         {
-            var result = await PostMessageAsync(options.BotToken, chatId, html, cancellationToken)
+            var result = await PostMessageAsync(options.BotToken, chatId, html, cancellationToken, replyMarkup)
                 .ConfigureAwait(false);
             if (!result.Success)
             {
@@ -128,7 +164,7 @@ public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, ITele
             return TelegramResult.Fail($"Could not reach Telegram: {e.Message}");
         }
 
-        var send = await SendAsync(options, html, cancellationToken).ConfigureAwait(false);
+        var send = await SendAsync(options, html, cancellationToken: cancellationToken).ConfigureAwait(false);
         return send.Success
             ? TelegramResult.Ok($"{botName} is connected. {send.Message}")
             : TelegramResult.Fail($"{botName} is valid, but the message failed — {send.Message}");
@@ -377,6 +413,24 @@ public sealed class TelegramClient : ITelegramSender, ITelegramChatFinder, ITele
 
         return null;
     }
+
+    /// <summary>One round of long polling, for the listener that owns the command loop.</summary>
+    public Task<TelegramUpdates> PollAsync(
+        string botToken,
+        long? offset,
+        int holdSeconds,
+        string allowedUpdates,
+        CancellationToken cancellationToken = default) =>
+        GetUpdatesAsync(botToken, offset, holdSeconds, cancellationToken, allowedUpdates);
+
+    /// <summary>Answers a single chat, rather than every configured one.</summary>
+    public Task<TelegramResult> ReplyAsync(
+        string botToken,
+        string chatId,
+        string html,
+        string? replyMarkup = null,
+        CancellationToken cancellationToken = default) =>
+        PostMessageAsync(botToken, chatId, html, cancellationToken, replyMarkup);
 
     /// <summary>Clears the button's loading spinner and optionally shows a toast in Telegram.</summary>
     public async Task AnswerCallbackAsync(

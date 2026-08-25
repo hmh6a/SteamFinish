@@ -82,7 +82,11 @@ public sealed class TelegramNotifier(
                 _lastStep[app.AppId] = StepOf(app, settings);
                 if (settings.NotifyOnStart)
                 {
-                    Send(NotificationMessages.DownloadStarted(settings.Language, app, others));
+                    // The message that says a download started is exactly where a pause button is
+                    // wanted — but only when something is listening for it to be pressed.
+                    Send(
+                        NotificationMessages.DownloadStarted(settings.Language, app, others),
+                        settings.RemoteCommands ? TelegramKeyboard.PauseResume(settings.Language) : null);
                 }
 
                 return;
@@ -282,7 +286,7 @@ public sealed class TelegramNotifier(
         return percent / step;
     }
 
-    private void Send(string html)
+    private void Send(string html, string? replyMarkup = null)
     {
         var settings = options().Clone();
         if (!settings.IsUsable)
@@ -294,7 +298,7 @@ public sealed class TelegramNotifier(
         // must never hold up monitoring, and the outcome is only reported through SendFailed.
         try
         {
-            _ = client.SendAsync(settings, html).ContinueWith(
+            _ = client.SendAsync(settings, html, replyMarkup).ContinueWith(
                 task =>
                 {
                     if (task.IsFaulted)

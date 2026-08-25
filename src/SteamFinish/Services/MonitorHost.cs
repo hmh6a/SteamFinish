@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows.Threading;
+using SteamFinish.Core.Control;
 using SteamFinish.Core.Logging;
 using SteamFinish.Core.Monitoring;
 using SteamFinish.Core.Notifications;
@@ -24,6 +25,8 @@ public sealed class MonitorHost : IDisposable
     private readonly DispatcherTimer _timer;
     private readonly List<FileSystemWatcher> _watchers = [];
 
+    private readonly IDownloadController? _downloads;
+
     private string[] _watchedRoots = [];
     private volatile bool _dirty = true;
     private bool _scanning;
@@ -31,13 +34,18 @@ public sealed class MonitorHost : IDisposable
     private DateTimeOffset _lastScan = DateTimeOffset.MinValue;
     private bool _disposed;
 
+    /// <summary>Held for as long as the countdown owns the Telegram connection.</summary>
+    private IDisposable? _countdownHoldsTelegram;
+
     public MonitorHost(
         DownloadScanner scanner,
         MonitorEngine engine,
         IPowerController power,
         TelegramNotifier telegram,
         Func<AppSettings> settings,
-        ILog log)
+        ILog log,
+        IDownloadController? downloads = null,
+        ITelegramConversation? conversation = null)
     {
         _scanner = scanner;
         Engine = engine;
@@ -45,7 +53,21 @@ public sealed class MonitorHost : IDisposable
         Telegram = telegram;
         _settings = settings;
         _log = log;
+        _downloads = downloads;
         _dispatcher = Dispatcher.CurrentDispatcher;
+
+        if (conversation is not null)
+        {
+            Commands = new TelegramCommandListener(() => _settings().Telegram, conversation, log)
+            {
+                Control = ApplyDownloadCommandAsync,
+                Status = BuildStatusMessage,
+
+                // A resume needs to name the download at the head of the queue: flipping the global
+                // switch back on does not restart a game that was paused individually.
+                CurrentAppId = () => LastSnapshot?.Headline?.AppId,
+            };
+        }
 
         _timer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
         {
@@ -64,6 +86,12 @@ public sealed class MonitorHost : IDisposable
     public MonitorEngine Engine { get; }
 
     public TelegramNotifier Telegram { get; }
+
+    /// <summary>The loop that answers /pause, /resume and /status; <c>null</c> when Telegram is not wired up.</summary>
+    public TelegramCommandListener? Commands { get; }
+
+    /// <summary>Pausing and resuming Steam downloads; <c>null</c> on a build without it.</summary>
+    public IDownloadController? Downloads => _downloads;
 
     /// <summary>Live network and disk rates derived from consecutive snapshots.</summary>
     public TransferMeter Meter { get; } = new();
@@ -174,20 +202,24 @@ public sealed class MonitorHost : IDisposable
     }
 
     /// <summary>
-    /// True when Telegram is configured to report on downloads. Those messages describe the download
-    /// itself rather than the monitoring session, so they must not depend on monitoring being on.
+    /// True when Telegram is configured to report on downloads, or to answer questions about them.
+    /// Those messages describe the download itself rather than the monitoring session, so they must
+    /// not depend on monitoring being on — and /status can only answer from a recent scan.
     /// </summary>
     private bool TelegramWantsUpdates
     {
         get
         {
             var telegram = _settings().Telegram;
-            return telegram.IsUsable && (telegram.NotifyOnProgress || telegram.NotifyOnStart);
+            return telegram.IsUsable
+                   && (telegram.NotifyOnProgress || telegram.NotifyOnStart || telegram.RemoteCommands);
         }
     }
 
     private void SyncTimer()
     {
+        Commands?.Sync();
+
         var shouldRun = Engine.IsEnabled || _keepLive || TelegramWantsUpdates;
 
         if (shouldRun && !_timer.IsEnabled)
@@ -290,6 +322,15 @@ public sealed class MonitorHost : IDisposable
     private void OnCountdownStarted()
     {
         var settings = _settings();
+
+        // The countdown message polls for its own button presses, and Telegram allows a bot only one
+        // listener at a time, so the command loop stands aside until the countdown is settled. With
+        // the countdown buttons switched off nothing else polls, and it can keep listening.
+        if (settings.Telegram is { RemoteButtons: true, IsUsable: true })
+        {
+            _countdownHoldsTelegram ??= Commands?.Suspend();
+        }
+
         Telegram.OnCountdownStarted(
             Session.Summarize(DateTimeOffset.Now),
             settings.Action,
@@ -298,7 +339,74 @@ public sealed class MonitorHost : IDisposable
 
     private void OnCountdownCancelled(CountdownCancelReason reason)
     {
+        ReleaseTelegramForCommands();
         Telegram.OnCountdownCancelled(_settings().Action, reason);
+    }
+
+    private void ReleaseTelegramForCommands()
+    {
+        var hold = _countdownHoldsTelegram;
+        _countdownHoldsTelegram = null;
+        hold?.Dispose();
+    }
+
+    /// <summary>
+    /// Lets the chat-pairing flow take the Telegram connection: it listens for the user's next
+    /// message, which the command loop would otherwise swallow first.
+    /// </summary>
+    public IDisposable? SuspendRemoteCommands() => Commands?.Suspend();
+
+    /// <summary>
+    /// Runs a pause or resume asked for from the phone. Called on the listener's thread, so the
+    /// follow-up rescan is marshalled back before it touches anything the UI reads.
+    /// </summary>
+    private async Task<ControlResult> ApplyDownloadCommandAsync(
+        DownloadCommand command,
+        uint? appId,
+        CancellationToken cancellationToken)
+    {
+        if (_downloads is null)
+        {
+            return ControlResult.Fail(ControlOutcome.BridgeDisabled);
+        }
+
+        var result = await _downloads.ApplyAsync(command, appId, cancellationToken).ConfigureAwait(false);
+        if (!result.Success)
+        {
+            return result;
+        }
+
+        _log.Info($"Steam downloads {(command == DownloadCommand.Pause ? "paused" : "resumed")} from Telegram.");
+
+        // Steam rewrites its manifests a moment later; scanning at once keeps the window and the
+        // next status reply from showing the state the download was in before the command.
+        try
+        {
+            _ = _dispatcher.BeginInvoke(() =>
+            {
+                _dirty = true;
+                RefreshNow();
+            });
+        }
+        catch (TaskCanceledException)
+        {
+            // The app is closing; there is nothing left to refresh.
+        }
+
+        return result;
+    }
+
+    /// <summary>Builds the answer to /status from the most recent scan.</summary>
+    private string BuildStatusMessage()
+    {
+        var settings = _settings();
+        return NotificationMessages.Status(
+            settings.Telegram.Language,
+            LastSnapshot,
+            Meter.NetworkBytesPerSecond,
+            Meter.Eta,
+            Engine.IsEnabled,
+            settings.Action);
     }
 
     /// <summary>Applies a decision taken from the Telegram buttons.</summary>
@@ -341,6 +449,7 @@ public sealed class MonitorHost : IDisposable
 
         // Leaves the chat showing the outcome and takes the buttons away.
         Telegram.OnResolvedLocally(action, executed);
+        ReleaseTelegramForCommands();
 
         // Sleep and hibernate return control once the PC wakes up again; leave monitoring off then.
         Engine.Disable();
@@ -424,6 +533,9 @@ public sealed class MonitorHost : IDisposable
         _disposed = true;
         _timer.Stop();
         _timer.Tick -= OnTick;
+        // Disposed before the hold is released, so releasing it cannot start the loop up again.
+        Commands?.Dispose();
+        ReleaseTelegramForCommands();
         Engine.ActionDue -= OnActionDue;
         Engine.CountdownStarted -= OnCountdownStarted;
         Engine.CountdownCancelled -= OnCountdownCancelled;

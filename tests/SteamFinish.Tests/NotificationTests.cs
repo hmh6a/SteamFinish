@@ -1,3 +1,4 @@
+using SteamFinish.Core.Control;
 using SteamFinish.Core.Monitoring;
 using SteamFinish.Core.Notifications;
 using SteamFinish.Core.Power;
@@ -391,6 +392,45 @@ public class TelegramNotifierTests
     }
 
     [Fact]
+    public void TheStartMessageCarriesAPauseButtonWhenSomethingIsListeningForIt()
+    {
+        var options = Options();
+        options.NotifyOnStart = true;
+        options.NotifyOnProgress = false;
+        options.RemoteCommands = true;
+
+        var sent = new List<string>();
+        var client = new RecordingTelegramClient(sent);
+        var notifier = new TelegramNotifier(() => options, client);
+        var meter = new TransferMeter();
+
+        notifier.OnSnapshot(Downloading(0.00, "First", 1), meter);
+        notifier.OnSnapshot(Downloading(0.10, "Second", 2), meter);
+
+        var markup = Assert.Single(client.Markups);
+        Assert.Contains(DownloadButtons.DataFor(DownloadCommand.Pause), markup!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WithCommandsOffTheStartMessageHasNoButtonsToPress()
+    {
+        var options = Options();
+        options.NotifyOnStart = true;
+        options.NotifyOnProgress = false;
+        options.RemoteCommands = false;
+
+        var sent = new List<string>();
+        var client = new RecordingTelegramClient(sent);
+        var notifier = new TelegramNotifier(() => options, client);
+        var meter = new TransferMeter();
+
+        notifier.OnSnapshot(Downloading(0.00, "First", 1), meter);
+        notifier.OnSnapshot(Downloading(0.10, "Second", 2), meter);
+
+        Assert.Null(Assert.Single(client.Markups));
+    }
+
+    [Fact]
     public void NothingIsSentWhileTelegramIsSwitchedOff()
     {
         var options = Options();
@@ -431,12 +471,17 @@ public class TelegramNotifierTests
     /// <summary>Captures the message text instead of calling Telegram.</summary>
     private sealed class RecordingTelegramClient(List<string> sent) : ITelegramSender
     {
+        /// <summary>The buttons that came with each message, in the same order.</summary>
+        public List<string?> Markups { get; } = [];
+
         public Task<TelegramResult> SendAsync(
             TelegramOptions options,
             string html,
+            string? replyMarkup = null,
             CancellationToken cancellationToken = default)
         {
             sent.Add(html);
+            Markups.Add(replyMarkup);
             return Task.FromResult(TelegramResult.Ok("recorded"));
         }
 
@@ -444,6 +489,6 @@ public class TelegramNotifierTests
             TelegramOptions options,
             string html,
             CancellationToken cancellationToken = default) =>
-            SendAsync(options, html, cancellationToken);
+            SendAsync(options, html, cancellationToken: cancellationToken);
     }
 }

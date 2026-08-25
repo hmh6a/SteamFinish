@@ -500,6 +500,32 @@
                                 <TextBlock Text="{m:Tr Telegram.RemoteButtonsHint}" Style="{StaticResource MutedText}"
                                            Margin="28,-6,0,10" />
 
+                                <CheckBox Style="{StaticResource SettingCheckBox}" Margin="0,4,0,0"
+                                          Content="{m:Tr Telegram.RemoteCommands}"
+                                          IsChecked="{Binding TelegramRemoteCommands}" />
+                                <TextBlock Text="{m:Tr Telegram.RemoteCommandsHint}" Style="{StaticResource MutedText}"
+                                           Margin="28,-6,0,10" />
+
+                                <TextBlock Text="{m:Tr Telegram.DownloadControl}" Style="{StaticResource MutedText}"
+                                           Margin="0,4,0,4" />
+                                <TextBlock Text="{m:Tr Telegram.DownloadControlHint}" Style="{StaticResource MutedText}"
+                                           Margin="0,0,0,6" />
+                                <Button Content="{m:Tr Telegram.EnableDownloadControl}"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Command="{Binding EnableDownloadControlCommand}"
+                                        HorizontalAlignment="Left" />
+                                <TextBlock Text="{Binding DownloadControlStatus}" Margin="0,6,0,10">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DownloadControlStatus}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
                                 <TextBlock Text="{m:Tr Telegram.MessageLanguage}" Style="{StaticResource MutedText}" Margin="0,4,0,6" />
                                 <UniformGrid Columns="2" Margin="0,0,-8,0">
                                     <RadioButton Style="{StaticResource ActionTile}" GroupName="TelegramLanguage"

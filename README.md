@@ -37,6 +37,8 @@ Nothing is watched until you switch it on, and a countdown can always be cancell
   keep the PC awake
 - **Telegram notifications** — progress every *N* percent, and a message before the PC powers off
   with **Shutdown now** / **Don't** buttons you can press from your phone
+- **Pause a download from your phone** — `/pause`, `/resume` and `/status` in the chat, or the
+  buttons that come with them
 - **Arabic and English**, switched instantly, with full right-to-left layout
 - **Light, dark, or follow Windows**
 - **Updates itself** — checks GitHub and installs the new build with one click
@@ -73,6 +75,44 @@ In **Settings → Telegram**: press **Create a bot**, paste the token, then pres
 send `/start` to your bot. It sends a six-digit code to the chat and only adds it once you confirm
 the codes match — so it cannot pair with the wrong chat. Groups and channels work too.
 
+### Pausing a download from your phone
+
+Once a chat is paired the bot answers four commands:
+
+| | |
+| --- | --- |
+| `/pause` | stop Steam downloading |
+| `/resume` | start it again |
+| `/status` | what is downloading, how fast, and what happens when it finishes |
+| `/help` | the list above |
+
+Every reply carries **⏸ Pause** and **▶️ Resume** buttons, and so does the message announcing a new
+download — so after the first message it is one tap. Only the chats you paired are obeyed: holding
+the bot token is not enough to stop someone's download.
+
+**This needs one bit of setup, and it is worth knowing why.** Steam has no command line, registry
+key or `steam://` URL that pauses a download. What it does have is a Chromium-based client whose
+Downloads page drives the downloader through a privileged `SteamClient` object, and Chromium can be
+asked to expose that object locally. So SteamFinish says exactly what Steam's own pause button says
+— and to be allowed to, Steam needs a marker file in its install folder and one restart:
+
+1. **Settings → Telegram → Enable download control.** This writes the file; it needs no
+   administrator rights.
+2. **Restart Steam once.** The marker is only read at start-up.
+
+The button then reports whether the channel is actually open. Two things can stop it:
+
+- **Port 8080 is taken.** Steam's control channel always uses that port and the port is not
+  configurable. Docker Desktop, WSL and a lot of dev servers like 8080 too — if one of them holds
+  it, Steam cannot open the channel, and SteamFinish says so rather than failing quietly.
+- **Steam is closed.** Nothing to talk to.
+
+**Steam only.** The Xbox app exposes no way to control a download at all, so `/pause` covers Steam
+and says as much.
+
+A paused download is not a finished one, so pausing from your phone will never let the PC power
+itself off — unless you have deliberately ticked *Treat paused downloads as finished*.
+
 ## Building
 
 ```powershell
@@ -97,7 +137,8 @@ and attaches everything to the release.
 src/SteamFinish.Core/     Logic with no UI dependency — fully unit tested
   Steam/ Xbox/            Reading each launcher's download state
   Monitoring/             The state machine that decides when to act
-  Notifications/          Telegram messages and remote buttons
+  Notifications/          Telegram messages, remote buttons, the command listener
+  Control/                Pausing and resuming Steam downloads
   Power/ Settings/ Localization/ Updates/
 src/SteamFinish/          WPF app: window, view models, tray icon, timers
 tests/SteamFinish.Tests/  200+ tests, including end-to-end runs over real folders
@@ -113,6 +154,16 @@ Working out whether a download has finished is harder than it looks. Steam's `St
 distinguish a running download from a queued one, and do not change at all when you press pause —
 so SteamFinish decides by watching whether the byte counters actually move. Xbox progress comes from
 Gaming Services' own records rather than from guessing at file sizes.
+
+Pausing one is harder still. Steam offers nothing to the outside world for it, so the only honest
+route is through the client's own JavaScript — which is why that feature asks for a marker file and
+a restart instead of just working. The alternatives were worse: suspending `steam.exe` freezes the
+whole client, and blocking it in the firewall knocks the client offline rather than pausing it.
+
+Telegram allows one long-poll listener per bot, and whichever poller confirms an update throws it
+away for the others. So the command loop is the only thing polling in normal operation, and the two
+flows that need the connection to themselves — pairing a chat, and the countdown buttons — take it
+and give it back.
 
 The details, and the reasoning behind each decision, are in the source comments.
 
@@ -136,6 +187,8 @@ The details, and the reasoning behind each decision, are in the source comments.
 - بعد انتهاء كل شيء ينتظر فترة هدوء ثم يبدأ عدّاً تنازلياً يمكن إلغاؤه في أي لحظة.
 - **إشعارات تيليجرام**: تقدّم كل نسبة تحدّدها، ورسالة قبل الإطفاء فيها زرّان —
   «أطفئ الآن» و«لا تطفئ» — تتحكم بهما من هاتفك.
+- **إيقاف التنزيل واستئنافه من الهاتف**: أرسل `/pause` أو `/resume` أو `/status` إلى البوت،
+  أو اضغط الزرّين المرفقين بكل رد. لا يُستجاب إلا للمحادثات التي ربطتها بنفسك.
 - **واجهة عربية وإنجليزية** تتبدّل فوراً، مع تخطيط كامل من اليمين لليسار.
 - **وضع فاتح وداكن** أو حسب إعداد ويندوز.
 - **يحدّث نفسه** من GitHub بضغطة واحدة.
@@ -145,5 +198,20 @@ The details, and the reasoning behind each decision, are in the source comments.
 لا تحتاج تثبيت .NET، فهو مضمّن.
 
 **الاستخدام**: اختر الإجراء، ابدأ تنزيلاتك، ثم اضغط **تفعيل المراقبة**.
+
+**التحكم بالتنزيل من الهاتف** يحتاج خطوة إعداد واحدة، ومن المفيد معرفة سببها: لا يوفّر Steam أي أمر
+أو مفتاح تسجيل أو رابط `steam://` لإيقاف التنزيل. لكنه عميل مبني على Chromium، وصفحة التنزيلات فيه
+تُشغّل المُنزِّل عبر كائن `SteamClient`، ويمكن مطالبة Chromium بإتاحة ذلك الكائن محلياً. فيقول
+SteamFinish للمُنزِّل ما يقوله زر الإيقاف داخل Steam تماماً — ولكي يُسمح له بذلك يحتاج Steam إلى ملف
+علامة داخل مجلد تنصيبه وإعادة تشغيل واحدة:
+
+1. **الإعدادات ← تيليجرام ← تفعيل التحكم بالتنزيل** — ينشئ الملف، ولا يحتاج صلاحيات مدير.
+2. **أعد تشغيل Steam مرة واحدة** — لا يُقرأ الملف إلا عند بدء التشغيل.
+
+بعدها يخبرك الزر إن كانت القناة مفتوحة فعلاً. ما قد يمنعها أمران: أن يكون **المنفذ 8080** مشغولاً
+ببرنامج آخر (Docker وWSL يستخدمانه كثيراً) وهو المنفذ الوحيد الذي يستخدمه Steam، أو أن يكون Steam
+مغلقاً. **يعمل مع Steam فقط** — تطبيق Xbox لا يوفّر أي وسيلة تحكم بالتنزيل.
+
+والتنزيل الموقوف مؤقتاً لا يُعدّ منتهياً، فالإيقاف من الهاتف لن يؤدي إلى إطفاء الحاسبة.
 
 </div>

@@ -4,6 +4,7 @@ using Microsoft.Win32;
 using System.Reflection;
 using System.Windows;
 using SteamFinish.Core;
+using SteamFinish.Core.Control;
 using SteamFinish.Core.Localization;
 using SteamFinish.Core.Logging;
 using SteamFinish.Core.Monitoring;
@@ -26,6 +27,7 @@ public partial class App : Application
     private FileLog? _log;
     private AppSettings? _settings;
     private TelegramClient? _telegramClient;
+    private SteamDownloadController? _downloads;
     private UpdateService? _updates;
     private MonitorHost? _host;
     private MainViewModel? _viewModel;
@@ -84,9 +86,15 @@ public partial class App : Application
         _telegramClient = new TelegramClient(_log);
         var telegram = new TelegramNotifier(() => _settings!.Telegram, _telegramClient, _log, _telegramClient);
 
-        _host = new MonitorHost(scanner, engine, power, telegram, () => _settings!, _log);
+        // Pausing a download is a Steam-only trick, and one Steam allows only through its own
+        // JavaScript — see SteamCefBridge for why there is no simpler route.
+        _downloads = new SteamDownloadController(_log);
+
+        _host = new MonitorHost(
+            scanner, engine, power, telegram, () => _settings!, _log, _downloads, _telegramClient);
         _updates = new UpdateService(_settings.UpdateRepository, _log);
-        _viewModel = new MainViewModel(store, _settings, _host, librarySource, _telegramClient, _updates, _log);
+        _viewModel = new MainViewModel(
+            store, _settings, _host, librarySource, _telegramClient, _updates, _downloads, _log);
 
         _tray = new TrayIcon();
         _tray.ShowRequested += ShowMainWindow;
@@ -116,6 +124,11 @@ public partial class App : Application
         }
 
         OnStateChanged();
+
+        // Starts the poll timer and the Telegram command listener when the settings call for them.
+        // Doing it here rather than leaving it to the window means starting minimized still answers
+        // /pause from the phone.
+        _host.RefreshSchedule();
 
         // One scan up front so the window and the library list are populated straight away.
         _host.RefreshNow();
@@ -234,6 +247,7 @@ public partial class App : Application
         _viewModel?.Dispose();
         _host?.Dispose();
         _telegramClient?.Dispose();
+        _downloads?.Dispose();
         _updates?.Dispose();
         _tray?.Dispose();
         _instance?.Dispose();

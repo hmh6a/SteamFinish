@@ -10,4 +10,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- The Steam control channel is an implementation detail, but its wire handling is the part
+         most worth testing against a stand-in DevTools endpoint. -->
+    <InternalsVisibleTo Include="SteamFinish.Tests" />
+  </ItemGroup>
+
 </Project>

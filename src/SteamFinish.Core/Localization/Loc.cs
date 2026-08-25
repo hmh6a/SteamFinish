@@ -221,6 +221,32 @@ public sealed class Loc : INotifyPropertyChanged
         ["Telegram.RemoteButtonsHint"] = (
             "Lets you settle the countdown from your phone. Anyone who can use the bot can press them.",
             "يتيح حسم العد التنازلي من الهاتف. أي شخص يستطيع استخدام البوت يستطيع الضغط عليهما."),
+        // ---------------------------------------------------------------- Telegram: download control
+        ["Telegram.RemoteCommands"] = (
+            "Answer /pause, /resume and /status from the chat",
+            "الاستجابة لأوامر ‎/pause‎ و‎/resume‎ و‎/status‎ من المحادثة"),
+        ["Telegram.RemoteCommandsHint"] = (
+            "Only the chats listed above are obeyed. Pause and resume cover Steam only — the Xbox app offers no way to control it.",
+            "لا يُستجاب إلا للمحادثات المذكورة أعلاه. الإيقاف والاستئناف يخصّان Steam فقط — تطبيق Xbox لا يوفّر أي وسيلة تحكم."),
+        ["Telegram.DownloadControl"] = ("Pausing downloads", "التحكم بالتنزيل"),
+        ["Telegram.DownloadControlHint"] = (
+            "Steam has no way to pause a download from outside, unless its own control channel is opened first. This writes the file that opens it; Steam then has to be restarted once.",
+            "لا يوفّر Steam أي وسيلة لإيقاف التنزيل من خارجه ما لم تُفتح قناة التحكم الخاصة به. هذا الزر ينشئ الملف الذي يفتحها، ثم يجب إعادة تشغيل Steam مرة واحدة."),
+        ["Telegram.EnableDownloadControl"] = ("Enable download control", "تفعيل التحكم بالتنزيل"),
+        ["Telegram.ControlChecking"] = ("Checking…", "جارٍ التحقق…"),
+        ["Telegram.ControlReady"] = ("Download control is working.", "التحكم بالتنزيل يعمل."),
+        ["Telegram.ControlRestartSteam"] = (
+            "Restart Steam once, then this will work.",
+            "أعد تشغيل Steam مرة واحدة ليعمل هذا."),
+        ["Telegram.ControlSteamNotRunning"] = (
+            "Ready. Start Steam to use it.",
+            "جاهز. شغّل Steam لاستخدامه."),
+        ["Telegram.ControlSteamNotFound"] = ("Steam could not be found.", "لم يُعثر على Steam."),
+        ["Telegram.ControlPortBusy"] = (
+            "Port 8080 is held by another program, and it is the only port Steam uses. Close that program, then restart Steam.",
+            "المنفذ 8080 مشغول ببرنامج آخر، وهو المنفذ الوحيد الذي يستخدمه Steam. أغلق ذلك البرنامج ثم أعد تشغيل Steam."),
+        ["Telegram.ControlFailed"] = ("It did not work: {0}", "لم ينجح: {0}"),
+
         ["Telegram.MessageLanguage"] = ("Message language", "لغة الرسائل"),
         ["Telegram.SendTest"] = ("Send test message", "إرسال رسالة تجريبية"),
         ["Telegram.NotIdentified"] = ("not identified yet", "لم يُتعرّف عليها بعد"),

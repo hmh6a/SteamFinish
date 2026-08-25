@@ -138,7 +138,11 @@ public class RemoteMessageTests
 /// <summary>Records plain sends, so a prompt that falls back to one can be spotted.</summary>
 internal sealed class NullSender(List<string> sent) : ITelegramSender
 {
-    public Task<TelegramResult> SendAsync(TelegramOptions options, string html, CancellationToken cancellationToken = default)
+    public Task<TelegramResult> SendAsync(
+        TelegramOptions options,
+        string html,
+        string? replyMarkup = null,
+        CancellationToken cancellationToken = default)
     {
         sent.Add(html);
         return Task.FromResult(TelegramResult.Ok("recorded"));

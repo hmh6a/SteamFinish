@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using SteamFinish.Core;
+using SteamFinish.Core.Control;
 using SteamFinish.Core.Formatting;
 using SteamFinish.Core.Localization;
 using SteamFinish.Core.Logging;
@@ -39,6 +40,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly RelayCommand _addChatIdCommand;
     private readonly RelayCommand _removeChatIdCommand;
     private readonly RelayCommand _testTelegramCommand;
+    private readonly RelayCommand _enableDownloadControlCommand;
 
     private string _statusHeadline = "Steam has not been checked yet";
     private string _statusDetail = "Enable monitoring to start watching downloads.";
@@ -78,12 +80,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _showBotToken;
 
     private readonly ITelegramChatFinder _chatFinder;
+    private readonly IDownloadController? _downloads;
+    private string _downloadControlStatus = string.Empty;
     private readonly UpdateService? _updates;
     private UpdateInfo? _pendingUpdate;
     private string _updateStatus = string.Empty;
     private bool _updateAvailable;
     private bool _updateBusy;
     private CancellationTokenSource? _pairing;
+    private IDisposable? _commandsHeldForPairing;
     private DiscoveredChat? _pairedChat;
     private long? _pairedMessageId;
     private PairingStage _pairingStage = PairingStage.Idle;
@@ -97,6 +102,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         AutoLibrarySource librarySource,
         ITelegramChatFinder chatFinder,
         UpdateService? updates,
+        IDownloadController? downloads,
         FileLog? log)
     {
         _updates = updates;
@@ -105,6 +111,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _host = host;
         _librarySource = librarySource;
         _chatFinder = chatFinder;
+        _downloads = downloads;
         _log = log;
         _dispatcher = Dispatcher.CurrentDispatcher;
 
@@ -123,6 +130,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _addChatIdCommand = new RelayCommand(AddChatId, () => !string.IsNullOrWhiteSpace(_chatIdInput));
         _removeChatIdCommand = new RelayCommand(RemoveChatId, () => _selectedChatId is not null);
         _testTelegramCommand = new RelayCommand(TestTelegram, () => !_telegramBusy);
+        _enableDownloadControlCommand = new RelayCommand(EnableDownloadControl, () => !_telegramBusy);
         _checkUpdateCommand = new RelayCommand(() => _ = CheckUpdatesAsync(announceUpToDate: true), () => !_updateBusy);
         _installUpdateCommand = new RelayCommand(InstallUpdate, () => !_updateBusy && _pendingUpdate is not null);
         _findChatCommand = new RelayCommand(FindChat, () => _pairingStage != PairingStage.Listening);
@@ -766,6 +774,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set => SetSetting(_settings.Telegram.RemoteButtons == value, () => _settings.Telegram.RemoteButtons = value);
     }
 
+    public bool TelegramRemoteCommands
+    {
+        get => _settings.Telegram.RemoteCommands;
+        set
+        {
+            if (SetSetting(_settings.Telegram.RemoteCommands == value, () => _settings.Telegram.RemoteCommands = value))
+            {
+                // Starts or stops the listener, and keeps the scanner alive so /status can answer.
+                _host.RefreshSchedule();
+            }
+        }
+    }
+
+    /// <summary>
+    /// True once the marker file is in place. It does not promise the channel is open — Steam only
+    /// reads the marker when it starts — which is what the status line beside the button is for.
+    /// </summary>
+    public bool DownloadControlEnabled => _downloads?.BridgeMarkerPresent ?? false;
+
+    public string DownloadControlStatus
+    {
+        get => _downloadControlStatus;
+        private set => SetProperty(ref _downloadControlStatus, value);
+    }
+
+    public RelayCommand EnableDownloadControlCommand => _enableDownloadControlCommand;
+
     public bool TelegramNotifyOnProgress
     {
         get => _settings.Telegram.NotifyOnProgress;
@@ -845,6 +880,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _telegramBusy, value))
             {
                 _testTelegramCommand.RaiseCanExecuteChanged();
+                _enableDownloadControlCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -1330,6 +1366,56 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Writes the marker file Steam needs, then reports whether the channel is actually open —
+    /// which it is not until Steam has been restarted at least once afterwards.
+    /// </summary>
+    private async void EnableDownloadControl()
+    {
+        if (_downloads is null)
+        {
+            return;
+        }
+
+        TelegramBusy = true;
+        DownloadControlStatus = Loc.Get("Telegram.ControlChecking");
+
+        try
+        {
+            var setup = _downloads.EnableBridge();
+            OnPropertyChanged(nameof(DownloadControlEnabled));
+
+            switch (setup.Outcome)
+            {
+                case BridgeSetupOutcome.SteamNotFound:
+                    DownloadControlStatus = $"✕ {Loc.Get("Telegram.ControlSteamNotFound")}";
+                    return;
+
+                case BridgeSetupOutcome.Failed:
+                    DownloadControlStatus = $"✕ {Loc.F("Telegram.ControlFailed", setup.Detail ?? string.Empty)}";
+                    return;
+            }
+
+            var probe = await _downloads.ProbeAsync().ConfigureAwait(true);
+            DownloadControlStatus = probe.Outcome switch
+            {
+                ControlOutcome.Done => $"✓ {Loc.Get("Telegram.ControlReady")}",
+                ControlOutcome.RestartSteam => Loc.Get("Telegram.ControlRestartSteam"),
+                ControlOutcome.SteamNotRunning => Loc.Get("Telegram.ControlSteamNotRunning"),
+                ControlOutcome.PortBusy => $"✕ {Loc.Get("Telegram.ControlPortBusy")}",
+                _ => $"✕ {Loc.F("Telegram.ControlFailed", probe.Detail ?? probe.Outcome.ToString())}",
+            };
+        }
+        catch (Exception e)
+        {
+            DownloadControlStatus = $"✕ {e.Message}";
+        }
+        finally
+        {
+            TelegramBusy = false;
+        }
+    }
+
+    /// <summary>
     /// Listens for the user's message, then holds the six-digit code on screen so it can be checked
     /// against the one Telegram received before the chat is trusted.
     /// </summary>
@@ -1337,6 +1423,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         CancelPairing();
         SaveNow();
+
+        // The command loop is listening on the same bot; two pollers on one token take each other's
+        // updates, so it stands aside until the pairing is finished or cancelled.
+        _commandsHeldForPairing ??= _host.SuspendRemoteCommands();
 
         _pairing = new CancellationTokenSource();
         SetPairingStage(PairingStage.Listening);
@@ -1412,6 +1502,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void SetPairingStage(PairingStage stage)
     {
         _pairingStage = stage;
+
+        // Only the listening stage needs the Telegram connection to itself; confirming the code just
+        // edits a message, so the command loop can have it back.
+        if (stage != PairingStage.Listening)
+        {
+            var held = _commandsHeldForPairing;
+            _commandsHeldForPairing = null;
+            held?.Dispose();
+        }
+
         OnPropertyChanged(
             nameof(IsListeningForChat),
             nameof(IsAwaitingChatConfirmation),
@@ -1564,6 +1664,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         CancelPairing();
+        _commandsHeldForPairing?.Dispose();
+        _commandsHeldForPairing = null;
         ThemeManager.ThemeChanged -= OnThemeChanged;
         _host.SnapshotUpdated -= OnSnapshotUpdated;
         _host.Tick -= RefreshPhase;

@@ -81,20 +81,33 @@ internal static partial class SteamPorts
         }
     }
 
+    /// <summary>
+    /// The processes the Steam client is made of.
+    ///
+    /// <c>steamwebhelper</c> matters as much as <c>steam</c> here, and it is easy to get wrong: the
+    /// DevTools port belongs to the web helper, not to the process that was handed
+    /// <c>-devtools-port</c> on its command line. Scanning only <c>steam.exe</c> finds the friends
+    /// service and the game overlay and misses the one port that was being looked for.
+    /// </summary>
+    private static readonly string[] ClientProcesses = ["steam", "steamwebhelper"];
+
     private static HashSet<uint> SteamProcessIds()
     {
         var ids = new HashSet<uint>();
-        try
+        foreach (var name in ClientProcesses)
         {
-            foreach (var process in Process.GetProcessesByName("steam"))
+            try
             {
-                ids.Add((uint)process.Id);
-                process.Dispose();
+                foreach (var process in Process.GetProcessesByName(name))
+                {
+                    ids.Add((uint)process.Id);
+                    process.Dispose();
+                }
             }
-        }
-        catch (Exception)
-        {
-            // An unreadable process list just means no candidates; 8080 is still tried.
+            catch (Exception)
+            {
+                // An unreadable process list just means fewer candidates; 8080 is still tried.
+            }
         }
 
         return ids;

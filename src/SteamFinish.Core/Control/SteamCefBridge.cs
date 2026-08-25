@@ -253,7 +253,7 @@ public sealed class SteamCefBridge : IDisposable
 
             // A port that answered with something — even the wrong something — says more than one
             // that did not answer at all.
-            best = Rank(attempt) > Rank(best) ? attempt : best;
+            best = Rank(attempt, port) > Rank(best, ExpectedPort) ? attempt : best;
         }
 
         // Nothing worked, so whatever was remembered is stale.
@@ -263,14 +263,21 @@ public sealed class SteamCefBridge : IDisposable
             IsSteamRunning() ? ControlOutcome.RestartSteam : ControlOutcome.SteamNotRunning,
             Detail: "Nothing is listening.");
 
-        static int Rank(BridgeReply? reply) => reply?.Outcome switch
+        // "Another program holds the port" is only worth saying about the port Steam would have used
+        // on its own. Steam's other ports — the friends service, the game overlay — answer with
+        // things that are not DevTools all the time, and reporting those as a clash would send the
+        // user hunting for a program that does not exist. The real answer there is a restart.
+        int Rank(BridgeReply? reply, int port) => reply?.Outcome switch
         {
             ControlOutcome.Refused => 3,
-            ControlOutcome.PortBusy => 2,
+            ControlOutcome.PortBusy when port == ExpectedPort => 2,
             ControlOutcome.RestartSteam => 1,
             _ => 0,
         };
     }
+
+    /// <summary>Where Steam would be listening if nobody had interfered: 8080, or the first pinned port.</summary>
+    private int ExpectedPort => _fixedPorts is { Length: > 0 } pinned ? pinned[0] : DefaultDebugPort;
 
     private async Task<BridgeReply> ProbePortAsync(int port, CancellationToken cancellationToken)
     {

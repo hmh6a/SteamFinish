@@ -1069,6 +1069,21 @@ public class PortDiscoveryTests
     }
 
     [Fact]
+    public async Task SteamsOwnServicePortsAreNotMistakenForAPortClash()
+    {
+        // Steam listens on several ports that have nothing to do with DevTools and answer with
+        // whatever they answer with. Calling that "another program holds the port" would send the
+        // user hunting for a program that does not exist; the real answer is to restart Steam.
+        // The first pinned port stands in for 8080: nothing there, and the clash is on a later one.
+        using var friendsService = FakeDevToolsEndpoint.NotDevToolsAtAll();
+        using var bridge = new SteamCefBridge(null, SteamPorts.FindFreePort(), friendsService.Port);
+
+        var reply = await bridge.EvaluateAsync("1", CancellationToken.None);
+
+        Assert.NotEqual(ControlOutcome.PortBusy, reply.Outcome);
+    }
+
+    [Fact]
     public async Task AnotherProgramOnEveryCandidateIsReportedAsAPortClash()
     {
         // Nothing found, but something answered — which is a different problem from silence, and

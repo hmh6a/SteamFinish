@@ -821,7 +821,7 @@ public class SteamBridgeWireTests
         System.Text.Json.JsonSerializer.Serialize(new
         {
             id = 1,
-            result = new { result = new { type = "string", value = expression.Contains("EnableAllDownloads(false)", StringComparison.Ordinal) ? "ok" : "unexpected" } },
+            result = new { result = new { type = "string", value = expression.Contains("PauseAppUpdate(730)", StringComparison.Ordinal) ? "ok" : "unexpected" } },
         });
 
     [Fact]
@@ -836,19 +836,19 @@ public class SteamBridgeWireTests
 
         using var bridge = new SteamCefBridge(null, steam.Port);
         var reply = await bridge.EvaluateAsync(
-            """(function(){SteamClient.Downloads.EnableAllDownloads(false);return "ok";})()""",
+            """(function(){SteamClient.Downloads.PauseAppUpdate(730);return "ok";})()""",
             CancellationToken.None);
 
         Assert.Equal(ControlOutcome.Done, reply.Outcome);
         Assert.Equal("ok", reply.Value);
-        Assert.Contains("EnableAllDownloads(false)", seen!, StringComparison.Ordinal);
+        Assert.Contains("PauseAppUpdate(730)", seen!, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task TheSharedContextIsPickedOutOfThePageList()
     {
         // Steam lists several pages; only the offscreen one has the SteamClient object on it.
-        using var steam = FakeDevToolsEndpoint.LikeSteam(_ => Evaluated("EnableAllDownloads(false)"));
+        using var steam = FakeDevToolsEndpoint.LikeSteam(_ => Evaluated("PauseAppUpdate(730)"));
         using var bridge = new SteamCefBridge(null, steam.Port);
 
         var reply = await bridge.EvaluateAsync("1", CancellationToken.None);
@@ -931,10 +931,10 @@ public class SteamBridgeWireTests
             });
 
             using var controller = new SteamDownloadController(null, () => folder, steam.Port);
-            var result = await controller.ApplyAsync(DownloadCommand.Pause);
+            var result = await controller.ApplyAsync(DownloadCommand.Pause, appId: 730);
 
             Assert.True(result.Success, $"Pausing failed: {result.Outcome} {result.Detail}");
-            Assert.Contains("EnableAllDownloads(false)", seen!, StringComparison.Ordinal);
+            Assert.Contains("PauseAppUpdate(730)", seen!, StringComparison.Ordinal);
         }
         finally
         {
@@ -965,10 +965,9 @@ public class SteamBridgeWireTests
             var result = await controller.ApplyAsync(DownloadCommand.Resume, appId: 730);
 
             Assert.True(result.Success, $"Resuming failed: {result.Outcome} {result.Detail}");
-            Assert.Contains("EnableAllDownloads(true)", seen!, StringComparison.Ordinal);
-
-            // Flipping the global switch is not enough for a game paused on its own.
+            // The per-game pair, not the global switch: only these two undo each other.
             Assert.Contains("ResumeAppUpdate(730)", seen!, StringComparison.Ordinal);
+            Assert.DoesNotContain("EnableAllDownloads", seen!, StringComparison.Ordinal);
         }
         finally
         {
@@ -1103,6 +1102,80 @@ public class PortDiscoveryTests
             id = 1,
             result = new { result = new { type = "string", value } },
         });
+}
+
+public class PauseMechanismTests
+{
+    /// <summary>Records the script without needing a Steam on the other end.</summary>
+    private static async Task<string> ScriptFor(DownloadCommand command, uint? appId)
+    {
+        var folder = Directory.CreateTempSubdirectory("steamfinish-script").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(folder, SteamCefBridge.MarkerFileName), string.Empty);
+
+            var seen = string.Empty;
+            using var steam = FakeDevToolsEndpoint.LikeSteam(expression =>
+            {
+                seen = expression;
+                return System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    id = 1,
+                    result = new { result = new { type = "string", value = "ok" } },
+                });
+            });
+
+            using var controller = new SteamDownloadController(null, () => folder, steam.Port);
+            await controller.ApplyAsync(command, appId);
+            return seen;
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(DownloadCommand.Pause)]
+    [InlineData(DownloadCommand.Resume)]
+    public async Task TheGlobalPauseSwitchIsNeverTouched(DownloadCommand command)
+    {
+        // EnableAllDownloads(false) does pause a download, and nothing puts it back: not
+        // EnableAllDownloads(true), not ResumeAppUpdate, not QueueAppUpdate. Verified against a live
+        // Steam, where it stayed paused through all three and only a restart cleared it. A pause the
+        // phone cannot undo is worse than no pause, so only the per-game calls are used.
+        var script = await ScriptFor(command, 730);
+
+        Assert.DoesNotContain("EnableAllDownloads", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PauseAndResumeAreTheSamePairInBothDirections()
+    {
+        Assert.Contains("PauseAppUpdate(730)", await ScriptFor(DownloadCommand.Pause, 730), StringComparison.Ordinal);
+        Assert.Contains("ResumeAppUpdate(730)", await ScriptFor(DownloadCommand.Resume, 730), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WithNothingDownloadingThereIsNothingToName()
+    {
+        // Both calls take an app id. Falling back to the global switch here would be the one-way
+        // trap all over again, so it reports instead.
+        var folder = Directory.CreateTempSubdirectory("steamfinish-noapp").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(folder, SteamCefBridge.MarkerFileName), string.Empty);
+            using var controller = new SteamDownloadController(null, () => folder);
+
+            var result = await controller.ApplyAsync(DownloadCommand.Pause);
+
+            Assert.Equal(ControlOutcome.NothingDownloading, result.Outcome);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
 }
 
 public class ControlSettingsTests

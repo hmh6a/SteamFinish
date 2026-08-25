@@ -38,6 +38,12 @@ public enum ControlOutcome
     /// <summary>Steam answered but refused the call — a client too old to have the download API.</summary>
     Refused,
 
+    /// <summary>
+    /// Nothing is downloading, so there is no game to pause. Steam's pause is per-game; the global
+    /// one is deliberately not used because nothing undoes it.
+    /// </summary>
+    NothingDownloading,
+
     /// <summary>The channel was open a moment ago and is not now.</summary>
     Unreachable,
 }

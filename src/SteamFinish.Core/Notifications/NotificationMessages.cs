@@ -387,6 +387,7 @@ public static class NotificationMessages
             (true, ControlOutcome.RestartSteam) => "أعد تشغيل Steam مرة واحدة ليعمل التحكم بالتنزيل.",
             (true, ControlOutcome.PortBusy) =>
                 "المنفذ 8080 مشغول ببرنامج آخر، وهو المنفذ الوحيد الذي يستخدمه Steam. أغلق ذلك البرنامج ثم أعد تشغيل Steam.",
+            (true, ControlOutcome.NothingDownloading) => "لا يوجد تنزيل جارٍ.",
             (true, ControlOutcome.Refused) => "رفض Steam الأمر.",
             (true, _) => "انقطع الاتصال بـ Steam.",
 
@@ -399,6 +400,7 @@ public static class NotificationMessages
             (false, ControlOutcome.PortBusy) =>
                 "Port 8080 is held by another program, and it is the only port Steam uses. Close that "
                 + "program and restart Steam.",
+            (false, ControlOutcome.NothingDownloading) => "Nothing is downloading.",
             (false, ControlOutcome.Refused) => "Steam refused the command.",
             _ => "The connection to Steam dropped.",
         };

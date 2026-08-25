@@ -16,16 +16,6 @@ namespace SteamFinish.Core.Control;
 [SupportedOSPlatform("windows")]
 public sealed class SteamDownloadController : IDownloadController, IDisposable
 {
-    /// <summary>
-    /// The global switch behind Steam's "pause all" button. Wrapped so a client too old to have the
-    /// API answers with a word instead of throwing across the wire.
-    /// </summary>
-    private const string PauseScript =
-        """
-        (function(){try{var d=(window.SteamClient||{}).Downloads;if(!d)return "no-api";
-        d.EnableAllDownloads(false);return "ok";}catch(e){return "error:"+e;}})()
-        """;
-
     private const string ProbeScript =
         """
         (function(){try{return ((window.SteamClient||{}).Downloads)?"ok":"no-api";}catch(e){return "error:"+e;}})()
@@ -95,27 +85,40 @@ public sealed class SteamDownloadController : IDownloadController, IDisposable
     public Task<ControlResult> ApplyAsync(
         DownloadCommand command,
         uint? appId = null,
-        CancellationToken cancellationToken = default) =>
-        RunAsync(command == DownloadCommand.Pause ? PauseScript : ResumeScript(appId), cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        if (appId is not { } id)
+        {
+            // Both calls name a game. With nothing downloading there is nothing to name, and
+            // nothing to pause either.
+            return Task.FromResult(ControlResult.Fail(ControlOutcome.NothingDownloading));
+        }
+
+        return RunAsync(CommandScript(command, id), cancellationToken);
+    }
 
     /// <summary>
-    /// Flipping the global switch back on is not enough on its own: a game paused by hand in Steam's
-    /// UI carries its own paused flag and stays put. When the caller knows which download is at the
-    /// front of the queue, that one is nudged as well.
+    /// Steam's per-game pause, which is the pair of buttons on each row of the Downloads page.
+    ///
+    /// Deliberately not the global <c>EnableAllDownloads</c> switch behind the "pause all" button:
+    /// that one is one-way. <c>EnableAllDownloads(false)</c> does stop a running download, but
+    /// nothing puts it back — not <c>EnableAllDownloads(true)</c>, not <c>ResumeAppUpdate</c>, not
+    /// <c>QueueAppUpdate</c>. Tested against a live download: it stayed paused through all three and
+    /// only a Steam restart cleared it. A pause that cannot be undone from the phone is worse than
+    /// no pause at all, so this uses the per-game calls, which undo each other.
     /// </summary>
-    private static string ResumeScript(uint? appId)
+    private static string CommandScript(DownloadCommand command, uint appId)
     {
-        var resumeApp = appId is { } id
-            ? string.Create(CultureInfo.InvariantCulture, $"try{{d.ResumeAppUpdate({id});}}catch(e){{}}")
-            : string.Empty;
+        var call = command == DownloadCommand.Pause ? "PauseAppUpdate" : "ResumeAppUpdate";
 
         // Concatenated rather than interpolated: the script is mostly braces, and every one of them
         // would have to be doubled to survive an interpolated literal.
         return """
                (function(){try{var d=(window.SteamClient||{}).Downloads;if(!d)return "no-api";
-               d.EnableAllDownloads(true);
+               d.
                """
-               + resumeApp
+               + call
+               + string.Create(CultureInfo.InvariantCulture, $"({appId});")
                + """
                  return "ok";}catch(e){return "error:"+e;}})()
                  """;

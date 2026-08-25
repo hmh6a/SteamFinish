@@ -178,9 +178,22 @@ route is through the client's own JavaScript — which is why that feature asks 
 a restart instead of just working. The alternatives were worse: suspending `steam.exe` freezes the
 whole client, and blocking it in the firewall knocks the client offline rather than pausing it.
 
-The port that channel uses is discovered rather than configured. Asking Windows for the listening
-sockets owned by `steam.exe` and probing those beats asking the user which port to use, because the
-user does not know either — Steam chose it at start-up.
+Two things about that channel were only learnt by pointing it at a real Steam:
+
+**The port belongs to `steamwebhelper`, not `steam.exe`** — even though `steam.exe` is the process
+handed `-devtools-port` on its command line. Scanning only `steam.exe` finds the friends service and
+the game overlay and misses the one port being looked for, so the sweep covers both processes.
+
+**Steam's global pause is one-way.** `EnableAllDownloads(false)` does stop a running download, and
+nothing puts it back: not `EnableAllDownloads(true)`, not `ResumeAppUpdate`, not `QueueAppUpdate`.
+Tested against a live download, it stayed paused through all three and only a Steam restart cleared
+it. So SteamFinish uses the per-game pair, `PauseAppUpdate` and `ResumeAppUpdate` — the buttons on
+each row of the Downloads page — which do undo each other. A pause the phone cannot undo would be
+worse than no pause at all.
+
+The port is discovered rather than configured. Asking Windows for the listening sockets owned by the
+Steam processes and probing those beats asking the user which port to use, because the user does not
+know either — Steam chose it at start-up.
 
 Telegram allows one long-poll listener per bot, and whichever poller confirms an update throws it
 away for the others. So the command loop is the only thing polling in normal operation, and the two
